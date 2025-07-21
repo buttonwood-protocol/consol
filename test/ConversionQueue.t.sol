@@ -1,0 +1,527 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import {BaseTest, console} from "./BaseTest.t.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IRebasingERC20} from "../src/RebasingERC20.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {ConversionQueue} from "../src/ConversionQueue.sol";
+import {ILenderQueue, ILenderQueueEvents, ILenderQueueErrors} from "../src/interfaces/ILenderQueue/ILenderQueue.sol";
+import {IConversionQueue, IConversionQueueEvents} from "../src/interfaces/IConversionQueue/IConversionQueue.sol";
+import {IMortgageQueue, IMortgageQueueEvents} from "../src/interfaces/IMortgageQueue/IMortgageQueue.sol";
+import {MockPyth} from "./mocks/MockPyth.sol";
+import {IPriceOracle} from "../src/interfaces/IPriceOracle.sol";
+import {PythPriceOracle} from "../src/PythPriceOracle.sol";
+import {PythInterestRateOracle} from "../src/PythInterestRateOracle.sol";
+import {MockPyth} from "./mocks/MockPyth.sol";
+import {IInterestRateOracle} from "../src/interfaces/IInterestRateOracle.sol";
+import {IOriginationPool} from "../src/interfaces/IOriginationPool/IOriginationPool.sol";
+import {IGeneralManager} from "../src/interfaces/IGeneralManager/IGeneralManager.sol";
+import {GeneralManager} from "../src/GeneralManager.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {MortgagePosition, MortgageStatus} from "../src/types/MortgagePosition.sol";
+import {MortgageMath} from "../src/libraries/MortgageMath.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Roles} from "../src/libraries/Roles.sol";
+import {WithdrawalRequest} from "../src/types/WithdrawalRequest.sol";
+
+contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEvents {
+  using MortgageMath for MortgagePosition;
+
+  // Accounts addresses
+  address public borrower1 = makeAddr("Borrower 1");
+  address public borrower2 = makeAddr("Borrower 2");
+  address public borrower3 = makeAddr("Borrower 3");
+  address public lender1 = makeAddr("Lender 1");
+  address public lender2 = makeAddr("Lender 2");
+  address public lender3 = makeAddr("Lender 3");
+  address public keeper = makeAddr("Keeper");
+
+  // MortgageParameters
+  uint256 public tokenId1 = 1;
+  uint256 public tokenId2 = 2;
+  uint256 public tokenId3 = 3;
+
+  function setupThreeMortgages() public {
+    // Deal 600k of usdx to lender1 and have them deposit it into the origination pool
+    _mintUsdx(lender1, 600_000e18);
+    vm.startPrank(lender1);
+    usdx.approve(address(originationPool), 600_000e18);
+    originationPool.deposit(600_000e18);
+    vm.stopPrank();
+
+    // Move time forward into the deployment phase
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Set the treasury interest to 4% (with 1% confidence)
+    mockPyth.setPrice(TREASURY_3YR_ID, 4e8, 1e8, -8, block.timestamp);
+
+    // Open a mortgage for borrower1
+    _requestNoncompoundingPaymentPlanMortgage(borrower1, "mortgage1", 100_000e18, 2e8, address(0));
+
+    // Open a mortgage for borrower2
+    _requestNoncompoundingPaymentPlanMortgage(borrower2, "mortgage2", 200_000e18, 4e8, address(0));
+
+    // Open a mortgage for borrower3
+    _requestNoncompoundingPaymentPlanMortgage(borrower3, "mortgage3", 300_000e18, 6e8, address(0));
+
+    // Move time forward into the origination pool's redemption phase
+    vm.warp(originationPool.redemptionPhaseTimestamp());
+
+    // Have lender1 redeem out of the origination pool
+    vm.startPrank(lender1);
+    originationPool.redeem(600_000e18);
+    vm.stopPrank();
+
+    // Have lender1 send 204k of the consol to lender2 and 306k to lender3 (keeping 102k for themselves)
+    vm.startPrank(lender1);
+    consol.transfer(lender2, 204_000e18);
+    consol.transfer(lender3, 306_000e18);
+    vm.stopPrank();
+  }
+
+  function setUp() public override {
+    super.setUp();
+  }
+
+  function test_constructor() public view {
+    assertEq(conversionQueue.asset(), address(wbtc), "Asset mismatch");
+    assertEq(conversionQueue.decimals(), IERC20Metadata(address(wbtc)).decimals(), "Decimals mismatch");
+    assertEq(conversionQueue.subConsol(), address(subConsol), "SubConsol mismatch");
+    assertEq(conversionQueue.consol(), address(consol), "Consol mismatch");
+    assertEq(conversionQueue.generalManager(), address(generalManager), "General manager mismatch");
+    assertTrue(
+      IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, admin),
+      "Admin does not have the default admin role"
+    );
+    assertEq(
+      conversionQueue.lumpSumInterestRateBps(), conversionLumpSumInterestRateBps, "Lump sum interest rate BPS mismatch"
+    );
+    assertEq(
+      conversionQueue.paymentPlanLumpSumInterestRateBps(),
+      conversionPaymentPlanLumpSumInterestRateBps,
+      "Payment plan lump sum interest rate BPS mismatch"
+    );
+    assertEq(conversionQueue.priceMultiplierBps(), conversionPriceMultiplierBps, "Price multiplier BPS mismatch");
+  }
+
+  function test_supportsInterface() public view {
+    assertTrue(
+      IERC165(address(conversionQueue)).supportsInterface(type(IConversionQueue).interfaceId),
+      "ConversionQueue does not support the IConversionQueue interface"
+    );
+    assertTrue(
+      IERC165(address(conversionQueue)).supportsInterface(type(ILenderQueue).interfaceId),
+      "ConversionQueue does not support the ILenderQueue interface"
+    );
+    assertTrue(
+      IERC165(address(conversionQueue)).supportsInterface(type(IMortgageQueue).interfaceId),
+      "ConversionQueue does not support the IMortgageQueue interface"
+    );
+    assertTrue(
+      IERC165(address(conversionQueue)).supportsInterface(type(IERC165).interfaceId),
+      "ConversionQueue does not support the IERC165 interface"
+    );
+    assertTrue(
+      IERC165(address(conversionQueue)).supportsInterface(type(IAccessControl).interfaceId),
+      "ConversionQueue does not support the IAccessControl interface"
+    );
+  }
+
+  function test_conversionPrice(int64 rawPrice) public {
+    // Ensure that the price is between $10k and $1m
+    rawPrice = int64(uint64((bound(uint64(rawPrice), 10_000e8, 1_000_000e8))));
+
+    // Set the price
+    mockPyth.setPrice(BTC_PRICE_ID, rawPrice, 100e8, -8, block.timestamp);
+
+    // Fetch the current conversion price used in the conversion queue
+    uint256 conversionPrice = conversionQueue.conversionPrice();
+
+    // Assert that the conversion price is equal to the raw price
+    uint256 expectedConversionPrice = uint256(uint256(uint64(rawPrice)) * 1e10);
+    assertEq(conversionPrice, expectedConversionPrice, "Conversion price mismatch");
+  }
+
+  function test_setLumpSumInterestRateBps_revertsWhenDoesNotHaveAdminRole(
+    address caller,
+    uint16 newLumpSumInterestRateBps
+  ) public {
+    // Make sure the caller does not have the admin role
+    vm.assume(!IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the lump sum interest rate BPS without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    conversionQueue.setLumpSumInterestRateBps(newLumpSumInterestRateBps);
+    vm.stopPrank();
+  }
+
+  function test_setLumpSumInterestRateBps(uint16 newLumpSumInterestRateBps) public {
+    // Attempt to set the lump sum interest rate BPS as admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit LumpSumInterestRateBpsSet(newLumpSumInterestRateBps);
+    conversionQueue.setLumpSumInterestRateBps(newLumpSumInterestRateBps);
+    vm.stopPrank();
+
+    // Validate that the lump sum interest rate BPS is set to the new value
+    assertEq(conversionQueue.lumpSumInterestRateBps(), newLumpSumInterestRateBps, "Lump sum interest rate BPS mismatch");
+  }
+
+  function test_setPriceMultiplierBps_revertsWhenDoesNotHaveAdminRole(address caller, uint16 newPriceMultiplierBps)
+    public
+  {
+    // Make sure the caller does not have the admin role
+    vm.assume(!IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the price multiplier BPS without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    conversionQueue.setPriceMultiplierBps(newPriceMultiplierBps);
+    vm.stopPrank();
+  }
+
+  function test_setPriceMultiplierBps(uint16 newPriceMultiplierBps) public {
+    // Attempt to set the price multiplier BPS as admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit PriceMultiplierBpsSet(newPriceMultiplierBps);
+    conversionQueue.setPriceMultiplierBps(newPriceMultiplierBps);
+    vm.stopPrank();
+
+    // Validate that the conversion price multiplier BPS is set to the new value
+    assertEq(conversionQueue.priceMultiplierBps(), newPriceMultiplierBps, "Conversion price multiplier BPS mismatch");
+  }
+
+  function test_processWithdrawalRequests_revertsNoMortgagesEnqueued(uint256 numberOfRequests) public {
+    // Setup the 3 mortgages
+    setupThreeMortgages();
+
+    // Ensure that number of requests is greater than 0
+    numberOfRequests = bound(numberOfRequests, 1, uint256(type(uint8).max));
+
+    // Validate that the conversion queue has 0 mortgages
+    assertEq(conversionQueue.mortgageSize(), 0, "Conversion queue does not have 0 mortgages");
+
+    // Now have Lender1 request a withdrawal of 10k consols
+    vm.startPrank(lender1);
+    consol.approve(address(conversionQueue), 10_000e18);
+    conversionQueue.requestWithdrawal(10_000e18);
+    vm.stopPrank();
+
+    // Validate that there is 1 withdrawal request in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue does not have 1 withdrawal request");
+
+    // Set the price oracle to $200k per btc
+    mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
+
+    // Have the keeper attempt to process the withdrawal request
+    vm.startPrank(keeper);
+    vm.expectRevert(
+      abi.encodeWithSelector(ILenderQueueErrors.InsufficientWithdrawalCapacity.selector, numberOfRequests, 0)
+    );
+    conversionQueue.processWithdrawalRequests(numberOfRequests);
+    vm.stopPrank();
+  }
+
+  function test_processWithdrawalRequests_revertsNoWithdrawalRequests(uint256 numberOfRequests) public {
+    // Setup the 3 mortgages
+    setupThreeMortgages();
+
+    // Ensure that number of requests is greater than 0
+    numberOfRequests = bound(numberOfRequests, 1, uint256(type(uint8).max));
+
+    // Have borrowers enqueue the mortgages into the conversion queue (must be done through the general manager)
+    vm.startPrank(borrower1);
+    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower2);
+    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower3);
+    generalManager.enqueueMortgage(3, address(conversionQueue), 0);
+    vm.stopPrank();
+
+    // Validate that the conversion queue has 3 mortgages
+    assertEq(conversionQueue.mortgageSize(), 3, "Conversion queue does not have 3 mortgages");
+
+    // Validate that there are no withdrawal requests in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 0, "Conversion queue does not have 0 withdrawal requests");
+
+    // Set the price oracle to $200k per btc
+    mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
+
+    // Have the keeper process the withdrawal request
+    vm.startPrank(keeper);
+    vm.expectRevert(
+      abi.encodeWithSelector(ILenderQueueErrors.InsufficientWithdrawalCapacity.selector, numberOfRequests, 0)
+    );
+    conversionQueue.processWithdrawalRequests(numberOfRequests);
+    vm.stopPrank();
+  }
+
+  function test_processWithdrawalRequests_threeMortgages() public {
+    // Setup the 3 mortgages
+    setupThreeMortgages();
+
+    // Have borrowers enqueue the mortgages into the conversion queue (must be done through the general manager)
+    vm.startPrank(borrower1);
+    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower2);
+    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower3);
+    generalManager.enqueueMortgage(3, address(conversionQueue), 0);
+    vm.stopPrank();
+
+    // Validate that the conversion queue has 3 mortgages
+    assertEq(conversionQueue.mortgageSize(), 3, "Conversion queue does not have 3 mortgages");
+
+    // Now have Lender1 request a withdrawal of 10k consols
+    vm.startPrank(lender1);
+    consol.approve(address(conversionQueue), 10_000e18);
+    conversionQueue.requestWithdrawal(10_000e18);
+    vm.stopPrank();
+
+    // Validate that there is 1 withdrawal request in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue does not have 1 withdrawal request");
+
+    // Set the price oracle to $200k per btc
+    mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
+
+    // Validate that mortgagePosition1 had a purchase price of $100k
+    assertEq(
+      loanManager.getMortgagePosition(1).purchasePrice(),
+      100_000e18,
+      "MortgagePosition1 should have a purchase price of $100k"
+    );
+
+    // Have the keeper process the withdrawal request
+    vm.startPrank(keeper);
+    conversionQueue.processWithdrawalRequests(1);
+    vm.stopPrank();
+
+    // Fetch mortgagePosition1
+    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+
+    uint256 expectedCollateralToUse = 6e6; // $12k worth of btc when the price is $200k per btc
+
+    // Validate that the mortgage hasn't been fully converted yet, but has now had 10k * 1.27 of the amountBorrowed forgiven
+    assertEq(
+      mortgagePosition1.amountConverted,
+      10_000e18,
+      "MortgagePosition1 should have had $10k of the amountBorrowed forgiven"
+    );
+    assertEq(
+      mortgagePosition1.collateralConverted,
+      expectedCollateralToUse,
+      "MortgagePosition1 should have had expectedCollateralToUse of collateral converted"
+    );
+    assertEq(
+      uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "MortgagePosition1 should be in the active status"
+    );
+  }
+
+  function test_processWithdrawalRequests_oneRequestTwoMortgages() public {
+    // Setup the 3 mortgages
+    setupThreeMortgages();
+
+    // Have borrower1 and borrower2 enqueue their $100k and $200k mortgages into the conversion queue (must be done through the general manager)
+    vm.startPrank(borrower1);
+    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower2);
+    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    vm.stopPrank();
+
+    // Validate that the conversion queue has 2 mortgages
+    assertEq(conversionQueue.mortgageSize(), 2, "Conversion queue does not have 2 mortgages");
+
+    // Now have Lender3 request a withdrawal of 250k consols
+    vm.startPrank(lender3);
+    consol.approve(address(conversionQueue), 250_000e18);
+    conversionQueue.requestWithdrawal(250_000e18);
+    vm.stopPrank();
+
+    // Validate that there is 1 withdrawal request in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue does not have 1 withdrawal request");
+
+    // Validate that the consol balances of lender3 and the conversion queue are correct
+    assertEq(consol.balanceOf(lender3), 56_000e18, "Lender3 should have 56k consols left (306k - 250k)");
+    assertEq(consol.balanceOf(address(conversionQueue)), 250_000e18, "Conversion queue should have 250k consols");
+
+    // Set the price oracle to $200k per btc
+    mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
+
+    // Have the keeper process the withdrawal request
+    vm.startPrank(keeper);
+    conversionQueue.processWithdrawalRequests(1);
+    vm.stopPrank();
+
+    // Fetch mortgagePosition1
+    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+
+    uint256 expectedCollateralToUse1 = 6e7; // $120k worth of btc when the price is $200k per btc
+
+    // Validate that the mortgage has now had $100k of the amountBorrowed forgiven (the entire amountBorrowed)
+    assertEq(
+      mortgagePosition1.amountConverted,
+      mortgagePosition1.amountBorrowed,
+      "MortgagePosition1 should have had all of the amountBorrowed forgiven"
+    );
+    assertEq(mortgagePosition1.amountOutstanding(), 0, "MortgagePosition1 should have had 0 amountOutstanding");
+    assertEq(
+      mortgagePosition1.collateralConverted,
+      expectedCollateralToUse1,
+      "MortgagePosition1 should have had expectedCollateralToUse1 of collateral converted"
+    );
+    assertEq(
+      uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "MortgagePosition1 should be in the active status"
+    );
+
+    // Fetch mortgagePosition
+    MortgagePosition memory mortgagePosition = loanManager.getMortgagePosition(2);
+
+    uint256 expectedCollateralToUse2 = 9e7; // $180k worth of btc when the price is $200k per btc
+
+    // Validate that the mortgage hasn't been fully converted yet, but has now had $150k of the amountBorrowed forgiven
+    assertEq(
+      mortgagePosition.amountConverted,
+      150_000e18,
+      "MortgagePosition should have had 150k of the amountBorrowed forgiven"
+    );
+    assertEq(mortgagePosition.amountOutstanding(), 50_000e18, "MortgagePosition should have had 50k amountOutstanding");
+    assertEq(
+      mortgagePosition.collateralConverted,
+      expectedCollateralToUse2,
+      "MortgagePosition should have had expectedCollateralToUse2 of collateral converted"
+    );
+    assertEq(
+      uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "MortgagePosition should be in the active status"
+    );
+
+    // Validate lender3's new balances
+    assertEq(consol.balanceOf(lender3), 56_000e18, "Lender3 should have 56k consols left (306k - 250k)");
+    assertEq(
+      wbtc.balanceOf(lender3),
+      expectedCollateralToUse1 + expectedCollateralToUse2,
+      "Lender3 should have expectedCollateralToUse1 + expectedCollateralToUse2 collateral claimed from their conversions"
+    );
+  }
+
+  function test_processWithdrawalRequests_revertsTwoMortgagesInsufficientWithdrawalCapacity() public {
+    // Setup the 3 mortgages
+    setupThreeMortgages();
+
+    // Have borrower1 and borrower2 enqueue their $100k and $200k mortgages into the conversion queue (must be done through the general manager)
+    vm.startPrank(borrower1);
+    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower2);
+    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    vm.stopPrank();
+
+    // Validate that the conversion queue has 2 mortgages
+    assertEq(conversionQueue.mortgageSize(), 2, "Conversion queue does not have 2 mortgages");
+
+    // Now have Lender3 request a withdrawal of 250k consols
+    vm.startPrank(lender3);
+    consol.approve(address(conversionQueue), 306_000e18);
+    conversionQueue.requestWithdrawal(306_000e18);
+    vm.stopPrank();
+
+    // Validate that there is 1 withdrawal request in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue does not have 1 withdrawal request");
+
+    // Validate that the consol balances of lender3 and the conversion queue are correct
+    assertEq(consol.balanceOf(lender3), 0, "Lender3 should have 0k consols left");
+    assertEq(consol.balanceOf(address(conversionQueue)), 306_000e18, "Conversion queue should have 306k consols");
+
+    // Set the price oracle to $200k per btc
+    mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
+
+    // Have the keeper attempt to process the withdrawal request
+    vm.startPrank(keeper);
+    vm.expectRevert(abi.encodeWithSelector(ILenderQueueErrors.InsufficientWithdrawalCapacity.selector, 1, 0));
+    conversionQueue.processWithdrawalRequests(1);
+    vm.stopPrank();
+  }
+
+  function test_processWithdrawalRequests_partialWithdrawal() public {
+    // Setup the 3 mortgages
+    setupThreeMortgages();
+
+    // Have borrower1 and borrower2 enqueue their $100k and $200k mortgages into the conversion queue (must be done through the general manager)
+    vm.startPrank(borrower1);
+    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    vm.stopPrank();
+    vm.startPrank(borrower2);
+    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    vm.stopPrank();
+
+    // Validate that the conversion queue has 2 mortgages
+    assertEq(conversionQueue.mortgageSize(), 2, "Conversion queue does not have 2 mortgages");
+
+    // Now have Lender3 request a withdrawal of 250k consols
+    vm.startPrank(lender3);
+    consol.approve(address(conversionQueue), 306_000e18);
+    conversionQueue.requestWithdrawal(306_000e18);
+    vm.stopPrank();
+
+    // Validate that there is 1 withdrawal request in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue does not have 1 withdrawal request");
+
+    // Validate that the consol balances of lender3 and the conversion queue are correct
+    assertEq(consol.balanceOf(lender3), 0, "Lender3 should have 0k consols left");
+    assertEq(consol.balanceOf(address(conversionQueue)), 306_000e18, "Conversion queue should have 306k consols");
+
+    // Validate the withdrawal request is correct
+    WithdrawalRequest memory withdrawalRequest = conversionQueue.withdrawalQueue(0);
+    assertEq(withdrawalRequest.account, lender3, "Withdrawal request should be from lender3");
+    assertEq(
+      withdrawalRequest.shares,
+      consol.convertToShares(306_000e18),
+      "Withdrawal request should have 306k worth of shares"
+    );
+    assertEq(withdrawalRequest.amount, 306_000e18, "Withdrawal request should have 306k amount");
+    assertEq(withdrawalRequest.timestamp, block.timestamp, "Withdrawal request should have the current timestamp");
+    assertEq(withdrawalRequest.gasFee, 0, "Withdrawal request should have 0 gas fee");
+
+    // Set the price oracle to $200k per btc
+    mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
+
+    // Have the keeper do a partial withdrawal of the first request by passing in 0 requests
+    vm.startPrank(keeper);
+    conversionQueue.processWithdrawalRequests(0);
+    vm.stopPrank();
+
+    // Validate that there is still 1 withdrawal request in the conversion queue
+    assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue should still have 1 withdrawal request");
+
+    // Calculate the expected wbtc balance of lender3
+    uint256 expectedWbtc = Math.mulDiv(360_000e18, 1e8, 200_000e18); // ($300k * 1.2) worth of wbtc at a price of $200k/wbtc
+
+    // Validate that the consol balances of lender3 and the conversion queue are correct
+    assertEq(wbtc.balanceOf(lender3), expectedWbtc, "Lender3 should have expectedWbtc amount of wbtc");
+    assertEq(consol.balanceOf(address(conversionQueue)), 6_000e18, "Conversion queue should have 6k consols left");
+
+    // Validate that the withdrawal request has been partially filled
+    withdrawalRequest = conversionQueue.withdrawalQueue(0);
+    assertEq(withdrawalRequest.account, lender3, "Withdrawal request should be from lender3");
+    assertEq(
+      withdrawalRequest.shares, consol.convertToShares(6_000e18), "Withdrawal request should have 6k worth of shares"
+    );
+    assertEq(withdrawalRequest.amount, 6_000e18, "Withdrawal request should have 6k amount");
+    assertEq(withdrawalRequest.timestamp, block.timestamp, "Withdrawal request should have the current timestamp");
+    assertEq(withdrawalRequest.gasFee, 0, "Withdrawal request should have 0 gas fee");
+  }
+}

@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import {Test, console} from "forge-std/Test.sol";
+import {IntegrationBaseTest} from "./IntegrationBase.t.sol";
+import {MockERC20} from "../mocks/MockERC20.sol";
+import {IOriginationPool} from "../../src/interfaces/IOriginationPool/IOriginationPool.sol";
+import {IOrderPool} from "../../src/interfaces/IOrderPool/IOrderPool.sol";
+import {MockPyth} from "../mocks/MockPyth.sol";
+import {BaseRequest, CreationRequest} from "../../src/types/orders/OrderRequests.sol";
+import {MortgagePosition} from "../../src/types/MortgagePosition.sol";
+import {MortgageStatus} from "../../src/types/enums/MortgageStatus.sol";
+import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {MortgageMath} from "../../src/libraries/MortgageMath.sol";
+
+/**
+ * @title Integration_7_UsdxDonationTest
+ * @author @SocksNFlops
+ * @notice Attacker attempts to dilute shares of USDX
+ */
+contract Integration_7_UsdxDonationTest is IntegrationBaseTest {
+  using MortgageMath for MortgagePosition;
+
+  function setUp() public virtual override(IntegrationBaseTest) {
+    super.setUp();
+  }
+
+  function test_run() public virtual override {
+    // Mint 1_000_001 usdt to the attacker
+    MockERC20(address(usdt)).mint(address(attacker), 1_000_001e6);
+
+    // Mint 1 usdt to the rando
+    MockERC20(address(usdt)).mint(address(rando), 1e6);
+
+    // The attacker donates 1_000_000 usdt to USDX
+    vm.startPrank(attacker);
+    usdt.transfer(address(usdx), 1_000_000e6);
+    vm.stopPrank();
+
+    // The attacker properly deposits 1 usdt into USDX
+    vm.startPrank(attacker);
+    usdt.approve(address(usdx), 1e6);
+    usdx.deposit(address(usdt), 1e6);
+    vm.stopPrank();
+
+    // The rando deposits 1 usdt into USDX
+    vm.startPrank(rando);
+    usdt.approve(address(usdx), 1e6);
+    usdx.deposit(address(usdt), 1e6);
+    vm.stopPrank();
+
+    // The rando should have ~1 consol (off by at most 1 wei)
+    assertApproxEqAbs(usdx.balanceOf(address(rando)), 1e18, 1, "Rando should have 1 usdx");
+
+    // The attacker should have 1_000_001 usdx
+    assertEq(usdx.balanceOf(address(attacker)), 1_000_001e18, "Attacker should have 1_000_001 usdx");
+  }
+}

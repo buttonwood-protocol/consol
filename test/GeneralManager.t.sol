@@ -1,0 +1,1592 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+import {BaseTest, console} from "./BaseTest.t.sol";
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {IERC1822Proxiable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {
+  IGeneralManager,
+  IGeneralManagerEvents,
+  IGeneralManagerErrors
+} from "../src/interfaces/IGeneralManager/IGeneralManager.sol";
+import {GeneralManager} from "../src/GeneralManager.sol";
+import {IInterestRateOracle} from "../src/interfaces/IInterestRateOracle.sol";
+import {PythInterestRateOracle} from "../src/PythInterestRateOracle.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {LoanManager} from "../src/LoanManager.sol";
+import {ERC20Mock} from "@openzeppelin/contracts/mocks/token/ERC20Mock.sol";
+import {MortgagePosition, MortgageStatus} from "../src/types/MortgagePosition.sol";
+import {MockPyth} from "./mocks/MockPyth.sol";
+import {SubConsol} from "../src/SubConsol.sol";
+import {ISubConsol} from "../src/interfaces/ISubConsol/ISubConsol.sol";
+import {Consol} from "../src/Consol.sol";
+import {IConsol} from "../src/interfaces/IConsol/IConsol.sol";
+import {MortgageParams} from "../src/types/orders/MortgageParams.sol";
+import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+import {ILoanManager} from "../src/interfaces/ILoanManager/ILoanManager.sol";
+import {IOriginationPool} from "../src/interfaces/IOriginationPool/IOriginationPool.sol";
+import {CreationRequest, ExpansionRequest, BaseRequest} from "../src/types/orders/OrderRequests.sol";
+import {Roles} from "../src/libraries/Roles.sol";
+
+contract GeneralManagerTest is BaseTest {
+  function setUp() public override {
+    super.setUp();
+  }
+
+  function fuzzCreateRequestFromSeed(CreationRequest memory createRequestSeed)
+    public
+    view
+    returns (CreationRequest memory)
+  {
+    createRequestSeed.base.collateralAmount = bound(createRequestSeed.base.collateralAmount, 1, type(uint128).max);
+    createRequestSeed.base.totalPeriods = DEFAULT_MORTGAGE_PERIODS;
+    createRequestSeed.base.originationPool = address(originationPool);
+    createRequestSeed.base.conversionQueue = address(conversionQueue);
+    createRequestSeed.base.expiration =
+      uint32(bound(createRequestSeed.base.expiration, block.timestamp, block.timestamp + 3 days));
+    createRequestSeed.collateral = address(wbtc);
+    createRequestSeed.subConsol = address(subConsol);
+
+    // Ensure the create request is valid (if non-compounding, the mortgage must have a payment plan)
+    if (!createRequestSeed.base.isCompounding) {
+      createRequestSeed.hasPaymentPlan = true;
+    }
+
+    return createRequestSeed;
+  }
+
+  function fuzzExpansionRequestFromSeed(ExpansionRequest memory expansionRequestSeed)
+    public
+    view
+    returns (ExpansionRequest memory)
+  {
+    expansionRequestSeed.base.collateralAmount = bound(expansionRequestSeed.base.collateralAmount, 1, type(uint128).max);
+    expansionRequestSeed.base.totalPeriods = DEFAULT_MORTGAGE_PERIODS;
+    expansionRequestSeed.base.originationPool = address(originationPool);
+    expansionRequestSeed.base.conversionQueue = address(conversionQueue);
+    expansionRequestSeed.base.expiration =
+      uint32(bound(expansionRequestSeed.base.expiration, block.timestamp, block.timestamp + 3 days));
+    return expansionRequestSeed;
+  }
+
+  function test_initialize() public view {
+    MortgagePosition memory emptyMortgagePosition;
+    assertEq(generalManager.usdx(), address(usdx), "Usdx should be set correctly");
+    assertEq(generalManager.consol(), address(consol), "Consol should be set correctly");
+    assertEq(generalManager.insuranceFund(), insuranceFund, "Insurance fund should be set correctly");
+    assertEq(
+      generalManager.interestRateOracle(), address(interestRateOracle), "Interest rate oracle should be set correctly"
+    );
+    assertEq(
+      generalManager.originationPoolScheduler(),
+      address(originationPoolScheduler),
+      "Origination pool scheduler should be set correctly"
+    );
+    assertEq(generalManager.loanManager(), address(loanManager), "Loan manager should be set correctly");
+    assertEq(generalManager.penaltyRate(emptyMortgagePosition), penaltyRate, "Penalty rate should be set correctly");
+    assertEq(
+      generalManager.refinanceRate(emptyMortgagePosition), refinanceRate, "Refinance rate should be set correctly"
+    );
+  }
+
+  function test_supportsInterface() public view {
+    assertTrue(
+      IERC165(address(generalManager)).supportsInterface(type(IGeneralManager).interfaceId),
+      "Should support IGeneralManager"
+    );
+    assertTrue(IERC165(address(generalManager)).supportsInterface(type(IERC165).interfaceId), "Should support IERC165");
+    assertTrue(
+      IERC165(address(generalManager)).supportsInterface(type(IAccessControl).interfaceId),
+      "Should support IAccessControl"
+    );
+    assertTrue(
+      IERC165(address(generalManager)).supportsInterface(type(IERC1822Proxiable).interfaceId),
+      "Should support IERC1822Proxiable"
+    );
+  }
+
+  function test_setPenaltyRate_shouldRevertIfNotAdmin(address caller, uint16 newPenaltyRate) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the penalty rate without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setPenaltyRate(newPenaltyRate);
+    vm.stopPrank();
+  }
+
+  function test_setPenaltyRate(uint16 newPenaltyRate) public {
+    MortgagePosition memory mortgagePosition;
+
+    // Attempt to set the penalty rate without the admin role
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.PenaltyRateSet(penaltyRate, newPenaltyRate);
+    generalManager.setPenaltyRate(newPenaltyRate);
+    vm.stopPrank();
+
+    // Validate the penalty rate was set correctly
+    assertEq(generalManager.penaltyRate(mortgagePosition), newPenaltyRate, "Penalty rate should be set correctly");
+  }
+
+  function test_setRefinanceRate_shouldRevertIfNotAdmin(address caller, uint16 newRefinanceRate) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the refinance rate without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setRefinanceRate(newRefinanceRate);
+    vm.stopPrank();
+  }
+
+  function test_setRefinanceRate(uint16 newRefinanceRate) public {
+    MortgagePosition memory mortgagePosition;
+
+    // Attempt to set the refinance rate without the admin role
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.RefinanceRateSet(refinanceRate, newRefinanceRate);
+    generalManager.setRefinanceRate(newRefinanceRate);
+    vm.stopPrank();
+
+    // Validate the refinance rate was set correctly
+    assertEq(generalManager.refinanceRate(mortgagePosition), newRefinanceRate, "Refinance rate should be set correctly");
+  }
+
+  function test_setInsuranceFund_shouldRevertIfNotAdmin(address caller, address newInsuranceFund) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the insurance fund without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setInsuranceFund(newInsuranceFund);
+    vm.stopPrank();
+  }
+
+  function test_setInsuranceFund(address newInsuranceFund) public {
+    // Attempt to set the insurance fund without the admin role
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.InsuranceFundSet(insuranceFund, newInsuranceFund);
+    generalManager.setInsuranceFund(newInsuranceFund);
+    vm.stopPrank();
+
+    // Validate the insurance fund was set correctly
+    assertEq(generalManager.insuranceFund(), newInsuranceFund, "Insurance fund should be set correctly");
+  }
+
+  function test_setInterestRateOracle_shouldRevertIfNotAdmin(address caller, address newInterestRateOracle) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the interest rate oracle without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setInterestRateOracle(newInterestRateOracle);
+    vm.stopPrank();
+  }
+
+  function test_setInterestRateOracle(address newInterestRateOracle) public {
+    // Attempt to set the interest rate oracle without the admin role
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.InterestRateOracleSet(address(interestRateOracle), newInterestRateOracle);
+    generalManager.setInterestRateOracle(newInterestRateOracle);
+    vm.stopPrank();
+
+    // Validate the interest rate oracle was set correctly
+    assertEq(generalManager.interestRateOracle(), newInterestRateOracle, "Interest rate oracle should be set correctly");
+  }
+
+  function test_interestRate(int64 pythInterestRate, uint64 pythConfidence, bool hasPaymentPlan) public {
+    // Set the interest rate between 0% and 100%
+    pythInterestRate = int64(uint64(bound(uint64(pythInterestRate), 0, 100e8)));
+
+    // Set the confidence to at most 1%
+    pythConfidence = uint64(bound(pythConfidence, 0, 1e6));
+
+    // Set the pyth interest rate oracle price
+    mockPyth.setPrice(TREASURY_3YR_ID, pythInterestRate, pythConfidence, -8, block.timestamp);
+
+    // Get the interest rate
+    uint16 interestRate = generalManager.interestRate(address(wbtc), DEFAULT_MORTGAGE_PERIODS, hasPaymentPlan);
+
+    // expectedSpread is 100 BPS for mortgages with a payment plan and 200 BPS for compounding mortgages
+    int64 expectedSpread = hasPaymentPlan ? int64(1e8) : int64(2e8);
+
+    // Calculate the expected interest rate
+    uint16 expectedInterestRate = uint16(uint64((2 * pythInterestRate + expectedSpread) / 1e6));
+
+    // Validate the interest rate was set correctly
+    assertEq(interestRate, expectedInterestRate, "Interest rate should be set correctly");
+  }
+
+  function test_setOriginationPoolScheduler_shouldRevertIfNotAdmin(address caller, address newOriginationPoolScheduler)
+    public
+  {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the origination pool scheduler without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setOriginationPoolScheduler(newOriginationPoolScheduler);
+    vm.stopPrank();
+  }
+
+  function test_setOriginationPoolScheduler(address newOriginationPoolScheduler) public {
+    // Attempt to set the origination pool scheduler without the admin role
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.OriginationPoolSchedulerSet(
+      address(originationPoolScheduler), newOriginationPoolScheduler
+    );
+    generalManager.setOriginationPoolScheduler(newOriginationPoolScheduler);
+    vm.stopPrank();
+
+    // Validate the origination pool scheduler was set correctly
+    assertEq(
+      generalManager.originationPoolScheduler(),
+      newOriginationPoolScheduler,
+      "Origination pool scheduler should be set correctly"
+    );
+  }
+
+  function test_setLoanManager_shouldRevertIfNotAdmin(address caller, address newLoanManager) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the loan manager without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setLoanManager(newLoanManager);
+    vm.stopPrank();
+  }
+
+  function test_setLoanManager(address newLoanManager) public {
+    // Change the loan manager as the admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.LoanManagerSet(address(loanManager), newLoanManager);
+    generalManager.setLoanManager(newLoanManager);
+    vm.stopPrank();
+
+    // Validate the loan manager was set correctly
+    assertEq(generalManager.loanManager(), newLoanManager, "Loan manager should be set correctly");
+  }
+
+  function test_setOrderPool_shouldRevertIfNotAdmin(address caller, address newOrderPool) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the order pool without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setOrderPool(newOrderPool);
+    vm.stopPrank();
+  }
+
+  function test_setOrderPool(address newOrderPool) public {
+    // Change the order pool as the admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.OrderPoolSet(address(orderPool), newOrderPool);
+    generalManager.setOrderPool(newOrderPool);
+    vm.stopPrank();
+
+    // Validate the order pool was set correctly
+    assertEq(generalManager.orderPool(), newOrderPool, "Order pool should be set correctly");
+  }
+
+  function test_updateSupportedMortgagePeriodTerms_shouldRevertIfNotAdmin(
+    address caller,
+    uint8 mortgagePeriod,
+    bool isSupported
+  ) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to update a supported mortgage period term without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.updateSupportedMortgagePeriodTerms(address(wbtc), mortgagePeriod, isSupported);
+    vm.stopPrank();
+  }
+
+  function test_updateSupportedMortgagePeriodTerms(uint8 mortgagePeriod, bool isSupported) public {
+    // Change the supported mortgage period term as the admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.SupportedMortgagePeriodTermsUpdated(address(wbtc), mortgagePeriod, isSupported);
+    generalManager.updateSupportedMortgagePeriodTerms(address(wbtc), mortgagePeriod, isSupported);
+    vm.stopPrank();
+
+    // Validate the supported mortgage period term was set correctly
+    assertEq(
+      generalManager.isSupportedMortgagePeriodTerms(address(wbtc), mortgagePeriod),
+      isSupported,
+      "Supported mortgage period should be set correctly"
+    );
+  }
+
+  function test_setPriceOracle_shouldRevertIfNotAdmin(address caller, address collateral, address newPriceOracle)
+    public
+  {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to update a price oracle without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setPriceOracle(collateral, newPriceOracle);
+    vm.stopPrank();
+  }
+
+  function test_setPriceOracle(address collateral, address newPriceOracle) public {
+    // Change the price oracle as the admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.PriceOracleSet(collateral, newPriceOracle);
+    generalManager.setPriceOracle(collateral, newPriceOracle);
+    vm.stopPrank();
+
+    // Validate the price oracle was set correctly
+    assertEq(generalManager.priceOracles(collateral), newPriceOracle, "Price oracle should be set correctly");
+  }
+
+  // ToDo: test_requestMortgageCreation_revertsIfCompoundingAndNoConversionQueue
+  function test_requestMortgageCreation_revertsIfCompoundingAndNoConversionQueue(
+    CreationRequest memory createRequestSeed
+  ) public {
+    // Fuzz the create request with compounding and no conversion queue
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.isCompounding = true;
+    creationRequest.base.conversionQueue = address(0);
+
+    // Attempt to request a mortgage as compounding and no conversion queue
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.CompoundingMustConvert.selector, creationRequest));
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
+  function test_requestMortgageCreation_revertsIfNonCompoundingAndNoPaymentPlan(
+    CreationRequest memory createRequestSeed
+  ) public {
+    // Fuzz the create request with non-compounding and no payment plan
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.isCompounding = false;
+    creationRequest.hasPaymentPlan = false;
+
+    // Attempt to request a mortgage as compounding and no payment plan
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.NonCompoundingMustHavePaymentPlan.selector, creationRequest)
+    );
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
+  function test_requestMortgageCreation_shouldRevertIfOriginationPoolNotRegistered(
+    CreationRequest memory createRequestSeed,
+    address unregisteredOriginationPool
+  ) public {
+    // Ensure that the origination pool is not registered
+    vm.assume(!originationPoolScheduler.isRegistered(unregisteredOriginationPool));
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.originationPool = unregisteredOriginationPool;
+
+    // Attempt to request a mortgage with an unregistered origination pool
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.InvalidOriginationPool.selector, unregisteredOriginationPool)
+    );
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
+  function test_requestMortgageCreation_shouldRevertIfInvalidTotalPeriods(
+    CreationRequest memory createRequestSeed,
+    uint8 totalPeriods
+  ) public {
+    // Ensure that the total periods are not supported
+    vm.assume(!generalManager.isSupportedMortgagePeriodTerms(address(wbtc), totalPeriods));
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.totalPeriods = totalPeriods;
+
+    // Set the oracle values (even if the oracle provides it, should revert if general manager doesn't support it)
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Attempt to request a mortgage with unsupported total periods
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.InvalidTotalPeriods.selector, address(wbtc), totalPeriods)
+    );
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
+  function test_requestMortgageCreation_compoundingWithPaymentPlan(
+    CreationRequest memory createRequestSeed,
+    uint256 gasFee
+  ) public {
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.isCompounding = true;
+    creationRequest.hasPaymentPlan = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 purchaseAmount =
+      amountBorrowed * 2 - Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+
+    // Minting collateral to the borrower and approving the generalManager to spend it
+    vm.startPrank(borrower);
+    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Validate that the order was enqueued in the order pool
+    assertEq(
+      orderPool.orders(0).originationPool,
+      address(originationPool),
+      "Origination pool should be the correct origination pool"
+    );
+    assertEq(
+      orderPool.orders(0).orderAmounts.collateralCollected,
+      requiredCollateralAmount,
+      "orderAmounts.collateralCollected should be the correct collateral amount"
+    );
+    assertEq(orderPool.orders(0).orderAmounts.usdxCollected, 0, "orderAmounts.usdxCollected should be 0");
+    assertEq(
+      orderPool.orders(0).orderAmounts.purchaseAmount,
+      purchaseAmount,
+      "orderAmounts.purchaseAmount should be purchaseAmount"
+    );
+    assertEq(orderPool.orders(0).mortgageParams.owner, borrower, "Owner should be the borrower");
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateral, address(wbtc), "Collateral should be the correct collateral"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateralAmount,
+      creationRequest.base.collateralAmount,
+      "Collateral amount should be the correct collateral amount"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
+    );
+    assertEq(orderPool.orders(0).mortgageParams.interestRate, 869, "Interest rate should be the correct interest rate");
+    assertEq(
+      orderPool.orders(0).mortgageParams.amountBorrowed,
+      amountBorrowed,
+      "amountBorrowed should be the correct amountBorrowed"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.totalPeriods,
+      DEFAULT_MORTGAGE_PERIODS,
+      "Total periods should be the correct total periods"
+    );
+    assertEq(orderPool.orders(0).timestamp, block.timestamp, "Timestamp should be the current timestamp");
+    assertEq(
+      orderPool.orders(0).expiration, creationRequest.base.expiration, "Expiration should be the correct expiration"
+    );
+    assertEq(orderPool.orders(0).gasFee, gasFee, "Gas fee should be the correct gas fee");
+
+    // Validate that the orderPool received the gas fee
+    assertEq(address(orderPool).balance, gasFee, "Order pool should have received the gas fee");
+  }
+
+  function test_requestMortgageCreation_nonCompoundingWithPaymentPlan(
+    CreationRequest memory createRequestSeed,
+    uint256 gasFee
+  ) public {
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.isCompounding = false;
+    creationRequest.hasPaymentPlan = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required usdx deposit amount
+    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 amountBorrowed = purchaseAmount / 2;
+    uint256 requiredUsdxAmount = Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    if (purchaseAmount % 2 == 1) {
+      requiredUsdxAmount += 1;
+    }
+
+    // Minting USDX to the borrower and approving the generalManager to spend it
+    _mintUsdx(borrower, requiredUsdxAmount);
+    vm.startPrank(borrower);
+    usdx.approve(address(generalManager), requiredUsdxAmount);
+    vm.stopPrank();
+
+    // Request a non-compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Validate that the order was enqueued in the order pool
+    assertEq(
+      orderPool.orders(0).originationPool,
+      address(originationPool),
+      "Origination pool should be the correct origination pool"
+    );
+    assertEq(
+      orderPool.orders(0).orderAmounts.purchaseAmount,
+      purchaseAmount,
+      "orderAmounts.purchaseAmount should be purchaseAmount"
+    );
+    assertEq(orderPool.orders(0).orderAmounts.collateralCollected, 0, "orderAmounts.collateralCollected should be 0");
+    assertEq(
+      orderPool.orders(0).orderAmounts.usdxCollected,
+      requiredUsdxAmount,
+      "orderAmounts.usdxCollected should be the correct usdx amount"
+    );
+    assertEq(orderPool.orders(0).mortgageParams.owner, borrower, "Owner should be the borrower");
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateral, address(wbtc), "Collateral should be the correct collateral"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateralAmount,
+      creationRequest.base.collateralAmount,
+      "Collateral amount should be the correct collateral amount"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
+    );
+    assertEq(orderPool.orders(0).mortgageParams.interestRate, 869, "Interest rate should be the correct interest rate");
+    assertEq(
+      orderPool.orders(0).mortgageParams.amountBorrowed,
+      amountBorrowed,
+      "amountBorrowed should be the correct amountBorrowed"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.totalPeriods,
+      DEFAULT_MORTGAGE_PERIODS,
+      "Total periods should be the correct total periods"
+    );
+    assertEq(orderPool.orders(0).timestamp, block.timestamp, "Timestamp should be the current timestamp");
+    assertEq(
+      orderPool.orders(0).expiration, creationRequest.base.expiration, "Expiration should be the correct expiration"
+    );
+    assertEq(orderPool.orders(0).gasFee, gasFee, "Gas fee should be the correct gas fee");
+
+    // Validate that the orderPool received the gas fee
+    assertEq(address(orderPool).balance, gasFee, "Order pool should have received the gas fee");
+  }
+
+  // // ToDo: test_requestMortgageCreation_compoundingWithoutPaymentPlan
+  // // ToDo: test_requestMortgageCreation_nonCompoundingWithoutPaymentPlan
+
+  function test_originate_compoundingShouldRevertIfOriginationPoolNotRegistered(
+    CreationRequest memory createRequestSeed,
+    uint256 expiration,
+    uint256 gasFee
+  ) public {
+    // Set the expiration to be between the deploy and redemption phase of the origination pool
+    expiration =
+      bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.expiration = expiration;
+    creationRequest.base.isCompounding = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e18);
+
+    // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
+
+    // Have the lender deposit amountBorrowed of USDX into the origination pool
+    _mintUsdx(lender, amountBorrowed);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountBorrowed);
+    originationPool.deposit(amountBorrowed);
+    vm.stopPrank();
+
+    // Minting collateral to the borrower and approving the generalManager to spend it
+    vm.startPrank(borrower);
+    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(
+      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+    );
+    vm.stopPrank();
+
+    // Unregister the origination pool from the origination pool scheduler
+    vm.startPrank(admin);
+    originationPoolScheduler.updateRegistration(address(originationPool), false);
+    vm.stopPrank();
+
+    // Attempt to have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    uint256[] memory orderIds = new uint256[](1);
+    uint256[] memory hintPrevIds = new uint256[](1);
+    orderIds[0] = 0;
+    hintPrevIds[0] = 0;
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.InvalidOriginationPool.selector, address(originationPool))
+    );
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+  }
+
+  function test_originate_compoundingWithoutPaymentPlanShouldRevertIfInvalidTotalPeriods(
+    CreationRequest memory createRequestSeed,
+    uint256 expiration,
+    uint256 gasFee
+  ) public {
+    // Set the expiration to be between the deploy and redemption phase of the origination pool
+    expiration =
+      bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.expiration = expiration;
+    creationRequest.base.isCompounding = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e18);
+
+    // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
+
+    // Have the lender deposit amountBorrowed of USDX into the origination pool
+    _mintUsdx(lender, amountBorrowed);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountBorrowed);
+    originationPool.deposit(amountBorrowed);
+    vm.stopPrank();
+
+    // Minting collateral to the borrower and approving the generalManager to spend it
+    vm.startPrank(borrower);
+    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(
+      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+    );
+    vm.stopPrank();
+
+    // Remove the totalPeriods duration from the supported mortgage periods
+    vm.startPrank(admin);
+    generalManager.updateSupportedMortgagePeriodTerms(address(wbtc), DEFAULT_MORTGAGE_PERIODS, false);
+    vm.stopPrank();
+
+    // Attempt to have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    uint256[] memory orderIds = new uint256[](1);
+    uint256[] memory hintPrevIds = new uint256[](1);
+    orderIds[0] = 0;
+    hintPrevIds[0] = 0;
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IGeneralManagerErrors.InvalidTotalPeriods.selector, address(wbtc), DEFAULT_MORTGAGE_PERIODS
+      )
+    );
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+  }
+
+  function test_originate_compoundingWithPaymentPlanCreation(
+    CreationRequest memory createRequestSeed,
+    uint256 expiration,
+    uint256 gasFee
+  ) public {
+    // Set the expiration to be between the deploy and redemption phase of the origination pool
+    expiration =
+      bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.expiration = expiration;
+    creationRequest.base.isCompounding = true;
+    creationRequest.hasPaymentPlan = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+
+    // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
+
+    // Have the lender deposit amountBorrowed of USDX into the origination pool
+    _mintUsdx(lender, amountBorrowed);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountBorrowed);
+    originationPool.deposit(amountBorrowed);
+    vm.stopPrank();
+
+    // Minting collateral to the borrower and approving the generalManager to spend it
+    vm.startPrank(borrower);
+    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(
+      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+    );
+    vm.stopPrank();
+
+    // Have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    uint256[] memory orderIds = new uint256[](1);
+    uint256[] memory hintPrevIds = new uint256[](1);
+    orderIds[0] = 0;
+    hintPrevIds[0] = 0;
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+
+    // Validate that the mortgage was created
+    assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
+
+    // Validate that the mortgage NFT has the correct mortgageId
+    assertEq(
+      mortgageNFT.getMortgageId(1), creationRequest.mortgageId, "Mortgage NFT should have the correct mortgageId"
+    );
+    assertEq(mortgageNFT.getTokenId(creationRequest.mortgageId), 1, "Mortgage NFT should have the correct tokenId");
+
+    // Validate that the collateral was transferred to SubConsol (via loanManager)
+    assertEq(
+      wbtc.balanceOf(address(subConsol)),
+      creationRequest.base.collateralAmount,
+      "Collateral should be transferred to SubConsol"
+    );
+
+    // Validate that the origination fee was minted in Consol and sent to the origination pool
+    assertEq(
+      usdx.balanceOf(address(consol)),
+      originationPool.calculateReturnAmount(amountBorrowed) - amountBorrowed,
+      "Origination fee should be paid via USDX"
+    );
+    assertEq(
+      consol.balanceOf(address(originationPool)),
+      originationPool.calculateReturnAmount(amountBorrowed),
+      "amountBorrowed should be paid to the origination pool in Consol"
+    );
+
+    // Validate that the GeneralManager has no Consol/USDX/SubConsol balances
+    assertEq(usdx.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 USDX");
+    assertEq(subConsol.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 SubConsol");
+    assertEq(consol.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Consol");
+    assertEq(wbtc.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Collateral");
+  }
+
+  function test_originate_nonCompoundingWithPaymentPlanCreation(
+    CreationRequest memory createRequestSeed,
+    uint256 expiration,
+    uint256 gasFee
+  ) public {
+    // Set the expiration to be between the deploy and redemption phase of the origination pool
+    expiration =
+      bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.expiration = expiration;
+    creationRequest.base.isCompounding = false;
+    creationRequest.hasPaymentPlan = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required usdx deposit amount
+    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 amountBorrowed = purchaseAmount / 2;
+    uint256 requiredUsdxAmount = Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    if (purchaseAmount % 2 == 1) {
+      requiredUsdxAmount += 1;
+    }
+
+    // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
+
+    // Have the lender deposit amountBorrowed of USDX into the origination pool
+    _mintUsdx(lender, amountBorrowed);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountBorrowed);
+    originationPool.deposit(amountBorrowed);
+    vm.stopPrank();
+
+    // Minting USDX to the borrower and approving the generalManager to spend it
+    _mintUsdx(borrower, requiredUsdxAmount);
+    vm.startPrank(borrower);
+    usdx.approve(address(generalManager), requiredUsdxAmount);
+    vm.stopPrank();
+
+    // Request a non-compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(orderPool), creationRequest.base.collateralAmount);
+    vm.stopPrank();
+
+    // Have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    uint256[] memory orderIds = new uint256[](1);
+    uint256[] memory hintPrevIds = new uint256[](1);
+    orderIds[0] = 0;
+    hintPrevIds[0] = 0;
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+
+    // Validate that the mortgage was created
+    assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
+
+    // Validate that the mortgage NFT has the correct mortgageId
+    assertEq(
+      mortgageNFT.getMortgageId(1), creationRequest.mortgageId, "Mortgage NFT should have the correct mortgageId"
+    );
+    assertEq(mortgageNFT.getTokenId(creationRequest.mortgageId), 1, "Mortgage NFT should have the correct tokenId");
+
+    // Validate that the collateral was transferred to SubConsol (via loanManager)
+    assertEq(
+      wbtc.balanceOf(address(subConsol)),
+      creationRequest.base.collateralAmount,
+      "Collateral should be transferred to SubConsol"
+    );
+
+    // Validate that the origination fee was minted in Consol and sent to the origination pool
+    assertEq(
+      usdx.balanceOf(address(consol)),
+      originationPool.calculateReturnAmount(amountBorrowed) - amountBorrowed,
+      "Origination fee should be paid via USDX"
+    );
+    assertEq(
+      consol.balanceOf(address(originationPool)),
+      originationPool.calculateReturnAmount(amountBorrowed),
+      "amountBorrowed should be paid to the origination pool in Consol"
+    );
+
+    // Validate that the GeneralManager has no Consol/USDX/SubConsol/Collateral balances
+    assertEq(usdx.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 USDX");
+    assertEq(subConsol.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 SubConsol");
+    assertEq(consol.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Consol");
+    assertEq(wbtc.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Collateral");
+  }
+
+  // // ToDo: test_originate_compoundingWithoutPaymentPlanExpansion
+  // // ToDo: test_originate_nonCompoundingWithoutPaymentPlanExpansion
+
+  function test_convert_revertsIfDoesNotHaveConversionRole(
+    address caller,
+    uint256 tokenId,
+    uint256 amount,
+    uint256 collateralAmount
+  ) public {
+    // Ensure the caller doesn't have the conversion role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.CONVERSION_ROLE, caller));
+
+    // Attempt to update a price oracle without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.CONVERSION_ROLE)
+    );
+    generalManager.convert(tokenId, amount, collateralAmount);
+    vm.stopPrank();
+  }
+
+  function test_convert_compoundingWithPaymentPlan(
+    address caller,
+    CreationRequest memory createRequestSeed,
+    uint256 conversionAmount,
+    uint256 collateralConversionAmount
+  ) public {
+    // Have admin grant the conversion role to the caller
+    vm.startPrank(admin);
+    IAccessControl(address(generalManager)).grantRole(Roles.CONVERSION_ROLE, caller);
+    vm.stopPrank();
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.expiration = originationPool.deployPhaseTimestamp();
+    creationRequest.base.isCompounding = true;
+    creationRequest.hasPaymentPlan = true;
+
+    // Make sure the collateral conversion amount is less than the collateral amount
+    collateralConversionAmount = bound(collateralConversionAmount, 1, creationRequest.base.collateralAmount);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 3_84700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 107537_17500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+
+    // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
+
+    // Make sure the conversion amount is less than or equal to the amountBorrowed
+    conversionAmount = bound(conversionAmount, 1, amountBorrowed);
+
+    // Have the lender deposit amountBorrowed of USDX into the origination pool
+    _mintUsdx(lender, amountBorrowed);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountBorrowed);
+    originationPool.deposit(amountBorrowed);
+    vm.stopPrank();
+
+    // Minting collateral to the borrower and approving the generalManager to spend it
+    vm.startPrank(borrower);
+    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding mortgage with a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: 0}(creationRequest);
+    vm.stopPrank();
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(
+      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+    );
+    vm.stopPrank();
+
+    // Have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    uint256[] memory orderIds = new uint256[](1);
+    uint256[] memory hintPrevIds = new uint256[](1);
+    orderIds[0] = 0;
+    hintPrevIds[0] = 0;
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+
+    // Validate that the borrower has 1 mortgage at this point and that the tokenId is 1
+    assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
+    assertEq(mortgageNFT.ownerOf(1), borrower, "Borrower should be the owner of the mortgage NFT");
+
+    // Have the caller convert the mortgage
+    vm.startPrank(caller);
+    generalManager.convert(1, conversionAmount, collateralConversionAmount);
+    vm.stopPrank();
+
+    // Validate that the mortgagePosition has been updated
+    assertEq(loanManager.getMortgagePosition(1).amountConverted, conversionAmount, "Amount converted should be updated");
+    assertEq(
+      loanManager.getMortgagePosition(1).collateralConverted,
+      collateralConversionAmount,
+      "Collateral converted should be updated"
+    );
+
+    // Validate that the mortgage is still active at the end (no burning on conversion)
+    assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
+    assertEq(
+      uint8(loanManager.getMortgagePosition(1).status), uint8(MortgageStatus.ACTIVE), "Mortgage should be active"
+    );
+  }
+
+  function test_requestBalanceSheetExpansion_revertsIfDoesNotHaveExpansionRole(
+    address caller,
+    ExpansionRequest memory expansionRequestSeed
+  ) public {
+    // Make sure the caller doesn't have the expansion role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.EXPANSION_ROLE, caller));
+
+    // Fuzz the expansion request
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+
+    // Attempt to request a balance sheet expansion without the expansion role
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.EXPANSION_ROLE)
+    );
+    vm.startPrank(caller);
+    generalManager.requestBalanceSheetExpansion(expansionRequest);
+    vm.stopPrank();
+  }
+
+  function test_requestBalanceSheetExpansion_shouldRevertIfOriginationPoolNotRegistered(
+    ExpansionRequest memory expansionRequestSeed,
+    address unregisteredOriginationPool
+  ) public {
+    // Ensure that the origination pool is not registered
+    vm.assume(!originationPoolScheduler.isRegistered(unregisteredOriginationPool));
+
+    // Fuzz the expansion request
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.base.originationPool = unregisteredOriginationPool;
+
+    // Mock the loan manager to return a blank mortgage position
+    MortgagePosition memory mortgagePosition;
+    vm.mockCall(
+      address(loanManager),
+      abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
+      abi.encode(mortgagePosition)
+    );
+
+    // Attempt to request a balance sheet expansion with an unregistered origination pool
+    vm.startPrank(balanceSheetExpander);
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.InvalidOriginationPool.selector, unregisteredOriginationPool)
+    );
+    generalManager.requestBalanceSheetExpansion(expansionRequest);
+    vm.stopPrank();
+  }
+
+  function test_requestBalanceSheetExpansion_shouldRevertIfInvalidTotalPeriods(
+    ExpansionRequest memory expansionRequestSeed,
+    uint8 invalidPeriods
+  ) public {
+    // Ensure that the total periods are not supported
+    vm.assume(!generalManager.isSupportedMortgagePeriodTerms(address(wbtc), invalidPeriods));
+
+    // Fuzz the expansion request
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.base.totalPeriods = invalidPeriods;
+
+    // Set the oracle values (even if the oracle provides it, should revert if general manager doesn't support it)
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Mock the loan manager to return a blank mortgage position (with wbtc as the collateral)
+    MortgagePosition memory mortgagePosition;
+    mortgagePosition.collateral = address(wbtc);
+    vm.mockCall(
+      address(loanManager),
+      abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
+      abi.encode(mortgagePosition)
+    );
+
+    // Attempt to request a balance sheet expansion with unsupported total periods
+    vm.startPrank(balanceSheetExpander);
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IGeneralManagerErrors.InvalidTotalPeriods.selector, address(wbtc), expansionRequest.base.totalPeriods
+      )
+    );
+    generalManager.requestBalanceSheetExpansion(expansionRequest);
+    vm.stopPrank();
+  }
+
+  function test_requestBalanceSheetExpansion_compounding(ExpansionRequest memory expansionRequestSeed, uint256 gasFee)
+    public
+  {
+    // Fuzz the expansion request
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.base.isCompounding = true;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the balanceSheetExpander the gas fee
+    vm.deal(balanceSheetExpander, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((expansionRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 purchaseAmount = amountIn * 2 - Math.mulDiv(amountIn, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+
+    // Minting collateral to the balanceSheetExpander and approving the generalManager to spend it
+    vm.startPrank(balanceSheetExpander);
+    ERC20Mock(address(wbtc)).mint(balanceSheetExpander, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Mock the loan manager to return a blank mortgage position with some prefilled values
+    MortgagePosition memory mortgagePosition;
+    mortgagePosition.collateral = address(wbtc);
+    mortgagePosition.subConsol = address(subConsol);
+    vm.mockCall(
+      address(loanManager),
+      abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
+      abi.encode(mortgagePosition)
+    );
+
+    // Request a compounding balance sheet expansion
+    vm.startPrank(balanceSheetExpander);
+    generalManager.requestBalanceSheetExpansion{value: gasFee}(expansionRequest);
+    vm.stopPrank();
+
+    // Validate that the order was enqueued in the order pool
+    assertEq(
+      orderPool.orders(0).originationPool,
+      address(originationPool),
+      "Origination pool should be the correct origination pool"
+    );
+    assertEq(
+      orderPool.orders(0).orderAmounts.collateralCollected,
+      requiredCollateralAmount,
+      "orderAmounts.collateralCollected should be the correct collateral amount"
+    );
+    assertEq(orderPool.orders(0).orderAmounts.usdxCollected, 0, "orderAmounts.usdxCollected should be 0");
+    assertEq(
+      orderPool.orders(0).orderAmounts.purchaseAmount,
+      purchaseAmount,
+      "orderAmounts.purchaseAmount should be purchaseAmount"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.owner,
+      balanceSheetExpander,
+      "Owner of the order should be the balanceSheetExpander"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateral, address(wbtc), "Collateral should be the correct collateral"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateralAmount,
+      expansionRequest.base.collateralAmount,
+      "Collateral amount should be equal to expansionRequest.base.collateralAmount"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
+    );
+    uint16 expectedInterestRate = mortgagePosition.hasPaymentPlan ? 869 : 969;
+    assertEq(
+      orderPool.orders(0).mortgageParams.interestRate,
+      expectedInterestRate,
+      "Interest rate should be the correct interest rate"
+    );
+    assertEq(orderPool.orders(0).mortgageParams.amountBorrowed, amountIn, "amountBorrowed should be equal to amountIn");
+    assertEq(
+      orderPool.orders(0).mortgageParams.totalPeriods,
+      DEFAULT_MORTGAGE_PERIODS,
+      "Total periods should be the correct total periods"
+    );
+    assertEq(orderPool.orders(0).timestamp, block.timestamp, "Timestamp should be the current timestamp");
+    assertEq(
+      orderPool.orders(0).expiration, expansionRequest.base.expiration, "Expiration should be the correct expiration"
+    );
+    assertEq(orderPool.orders(0).gasFee, gasFee, "Gas fee should be the correct gas fee");
+
+    // Validate that the orderPool received the gas fee
+    assertEq(address(orderPool).balance, gasFee, "Order pool should have received the gas fee");
+  }
+
+  function test_requestBalanceSheetExpansion_nonCompounding(
+    ExpansionRequest memory expansionRequestSeed,
+    uint256 gasFee
+  ) public {
+    // Fuzz the expansion request
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.base.isCompounding = false;
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the balanceSheetExpander the gas fee
+    vm.deal(balanceSheetExpander, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required usdx deposit amount
+    uint256 purchaseAmount = Math.mulDiv(expansionRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 amountIn = purchaseAmount / 2;
+    uint256 requiredUsdxAmount = Math.mulDiv(amountIn, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    if (purchaseAmount % 2 == 1) {
+      requiredUsdxAmount += 1;
+    }
+
+    // Minting USDX to the balanceSheetExpander and approving the generalManager to spend it
+    _mintUsdx(balanceSheetExpander, requiredUsdxAmount);
+    vm.startPrank(balanceSheetExpander);
+    usdx.approve(address(generalManager), requiredUsdxAmount);
+    vm.stopPrank();
+
+    // Mock the loan manager to return a blank mortgage position with some prefilled values
+    MortgagePosition memory mortgagePosition;
+    mortgagePosition.collateral = address(wbtc);
+    mortgagePosition.subConsol = address(subConsol);
+    vm.mockCall(
+      address(loanManager),
+      abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
+      abi.encode(mortgagePosition)
+    );
+
+    // Request a non-compounding balance sheet expansion
+    vm.startPrank(balanceSheetExpander);
+    generalManager.requestBalanceSheetExpansion{value: gasFee}(expansionRequest);
+    vm.stopPrank();
+
+    // Validate that the order was enqueued in the order pool
+    assertEq(
+      orderPool.orders(0).originationPool,
+      address(originationPool),
+      "Origination pool should be the correct origination pool"
+    );
+    assertEq(
+      orderPool.orders(0).orderAmounts.purchaseAmount,
+      purchaseAmount,
+      "orderAmounts.purchaseAmount should be purchaseAmount"
+    );
+    assertEq(orderPool.orders(0).orderAmounts.collateralCollected, 0, "orderAmounts.collateralCollected should be 0");
+    assertEq(
+      orderPool.orders(0).orderAmounts.usdxCollected,
+      requiredUsdxAmount,
+      "orderAmounts.usdxCollected should be the correct usdx amount"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.owner,
+      balanceSheetExpander,
+      "Owner of the order should be the balanceSheetExpander"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateral, address(wbtc), "Collateral should be the correct collateral"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.collateralAmount,
+      expansionRequest.base.collateralAmount,
+      "Collateral amount should be equal to expansionRequest.base.collateralAmount"
+    );
+    assertEq(
+      orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
+    );
+    uint16 expectedInterestRate = mortgagePosition.hasPaymentPlan ? 869 : 969;
+    assertEq(
+      orderPool.orders(0).mortgageParams.interestRate,
+      expectedInterestRate,
+      "Interest rate should be the correct interest rate"
+    );
+    assertEq(orderPool.orders(0).mortgageParams.amountBorrowed, amountIn, "amountBorrowed should be equal to amountIn");
+    assertEq(
+      orderPool.orders(0).mortgageParams.totalPeriods,
+      DEFAULT_MORTGAGE_PERIODS,
+      "Total periods should be the correct total periods"
+    );
+    assertEq(orderPool.orders(0).timestamp, block.timestamp, "Timestamp should be the current timestamp");
+    assertEq(
+      orderPool.orders(0).expiration, expansionRequest.base.expiration, "Expiration should be the correct expiration"
+    );
+    assertEq(orderPool.orders(0).gasFee, gasFee, "Gas fee should be the correct gas fee");
+
+    // Validate that the orderPool received the gas fee
+    assertEq(address(orderPool).balance, gasFee, "Order pool should have received the gas fee");
+  }
+
+  // ToDo:
+  function test_originate_compoundingWithoutPaymentPlanExpansion(
+    CreationRequest memory createRequestSeed,
+    ExpansionRequest memory expansionRequestSeed,
+    uint256 gasFee
+  ) public {
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.expiration = originationPool.deployPhaseTimestamp();
+    creationRequest.base.isCompounding = true;
+    creationRequest.hasPaymentPlan = false;
+
+    // Ensure the gas fee doesn't trigger overflow
+    gasFee = bound(gasFee, 1, type(uint128).max);
+
+    // Have the admin set the gas fee on the order pool
+    vm.startPrank(admin);
+    orderPool.setGasFee(gasFee);
+    vm.stopPrank();
+
+    // Deal the borrower the gas fee
+    vm.deal(borrower, gasFee);
+
+    // Set the oracle values
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount
+    uint256 requiredCollateralAmount =
+      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+
+    // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
+
+    // Have the lender deposit amountBorrowed of USDX into the origination pool
+    _mintUsdx(lender, amountBorrowed);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountBorrowed);
+    originationPool.deposit(amountBorrowed);
+    vm.stopPrank();
+
+    // Minting collateral to the borrower and approving the generalManager to spend it
+    vm.startPrank(borrower);
+    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding mortgage without a payment plan
+    vm.startPrank(borrower);
+    generalManager.requestMortgageCreation{value: gasFee}(creationRequest);
+    vm.stopPrank();
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(
+      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+    );
+    vm.stopPrank();
+
+    // Have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    uint256[] memory orderIds = new uint256[](1);
+    uint256[] memory hintPrevIds = new uint256[](1);
+    orderIds[0] = 0;
+    hintPrevIds[0] = 0;
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+
+    // Deploy a new origination pool with the same config
+    originationPool = IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolConfig.toId()));
+
+    // Fuzz the expansion request
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.tokenId = 1; // The tokenId of the first mortgage
+    expansionRequest.base.expiration = originationPool.deployPhaseTimestamp();
+    expansionRequest.base.isCompounding = true;
+
+    // Deal the balanceSheetExpander the gas fee
+    vm.deal(balanceSheetExpander, gasFee);
+
+    // Update the oracle values (keep the same ones for simplicity)
+    mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
+    mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
+
+    // Calculating the required collateral deposit amount again but this time for expanding the balance sheet
+    requiredCollateralAmount =
+      Math.mulDiv((expansionRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+
+    // Make sure that the amountIn is less than the pool limit but more than the minimum borrow amount
+    vm.assume(amountIn < originationPool.poolLimit() && amountIn > 1e18);
+
+    // Have the lender deposit amountIn of USDX into the origination pool
+    _mintUsdx(lender, amountIn);
+    vm.startPrank(lender);
+    usdx.approve(address(originationPool), amountIn);
+    originationPool.deposit(amountIn);
+    vm.stopPrank();
+
+    // Minting collateral to the balanceSheetExpander and approving the generalManager to spend it
+    vm.startPrank(balanceSheetExpander);
+    ERC20Mock(address(wbtc)).mint(balanceSheetExpander, requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
+    vm.stopPrank();
+
+    // Request a compounding balance sheet expansion of the previous mortgage (tokenId should be 1 since it was the first mortgage)
+    vm.startPrank(balanceSheetExpander);
+    generalManager.requestBalanceSheetExpansion{value: gasFee}(expansionRequest);
+    vm.stopPrank();
+
+    // Calculate the creation return amount (this is the amount of consol that the origination pool will receive after deployment)
+    uint256 creationReturnAmount = originationPool.calculateReturnAmount(amountBorrowed);
+
+    // Skip ahead to the deploy phase of the origination pool
+    vm.warp(originationPool.deployPhaseTimestamp());
+
+    // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
+    vm.startPrank(fulfiller);
+    ERC20Mock(address(wbtc)).mint(fulfiller, expansionRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).approve(
+      address(orderPool), expansionRequest.base.collateralAmount - requiredCollateralAmount
+    );
+    vm.stopPrank();
+
+    // Have the fulfiller process the order on the OrderPool
+    vm.startPrank(fulfiller);
+    orderIds = new uint256[](1);
+    hintPrevIds = new uint256[](1);
+    orderIds[0] = 1;
+    hintPrevIds[0] = 0;
+    orderPool.processOrders(orderIds, hintPrevIds);
+    vm.stopPrank();
+
+    // Validate that the mortgage belongs to the original owner
+    assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
+    assertEq(mortgageNFT.balanceOf(balanceSheetExpander), 0, "BalanceSheetExpander should have 0 mortgages");
+
+    // Validate that the mortgage NFT has the correct mortgageId
+    assertEq(
+      mortgageNFT.getMortgageId(1), creationRequest.mortgageId, "Mortgage NFT should have the correct mortgageId"
+    );
+    assertEq(mortgageNFT.getTokenId(creationRequest.mortgageId), 1, "Mortgage NFT should have the correct tokenId");
+
+    // Validate that the collateral was transferred to SubConsol (via loanManager)
+    assertEq(
+      wbtc.balanceOf(address(subConsol)),
+      creationRequest.base.collateralAmount + expansionRequest.base.collateralAmount,
+      "The original and new collateral should be transferred to SubConsol"
+    );
+
+    // Validate that the origination fee was minted in Consol and sent to the origination pool
+    assertEq(
+      usdx.balanceOf(address(consol)),
+      creationReturnAmount - amountBorrowed + originationPool.calculateReturnAmount(amountIn) - amountIn,
+      "Origination fee should be paid via USDX"
+    );
+    assertEq(
+      consol.balanceOf(address(originationPool)),
+      originationPool.calculateReturnAmount(amountIn),
+      "amountIn (+ origination fees) should be paid to the [SECOND] origination pool in Consol"
+    );
+
+    // Validate that the GeneralManager has no Consol/USDX/SubConsol balances
+    assertEq(usdx.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 USDX");
+    assertEq(subConsol.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 SubConsol");
+    assertEq(consol.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Consol");
+    assertEq(wbtc.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Collateral");
+  }
+}

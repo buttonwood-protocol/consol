@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+import {ILenderQueue} from "../src/interfaces/ILenderQueue/ILenderQueue.sol";
+import {UsdxQueue} from "../src/UsdxQueue.sol";
+import {DeployGeneralManager} from "./DeployGeneralManager.s.sol";
+import {ConversionQueue} from "../src/ConversionQueue.sol";
+import {IConversionQueue} from "../src/interfaces/IConversionQueue/IConversionQueue.sol";
+import {ForfeitedAssetsQueue} from "../src/ForfeitedAssetsQueue.sol";
+import {Roles} from "../src/libraries/Roles.sol";
+
+contract DeployQueues is DeployGeneralManager {
+  IConversionQueue[] public conversionQueues;
+  ILenderQueue public usdxQueue;
+  ILenderQueue public forfeitedAssetsQueue;
+
+  function setUp() public virtual override(DeployGeneralManager) {
+    super.setUp();
+  }
+
+  function run() public virtual override(DeployGeneralManager) {
+    super.run();
+    vm.startBroadcast(deployerPrivateKey);
+    deployUsdxQueue();
+    deployForfeitedAssetsQueue();
+    deployConversionQueues();
+    vm.stopBroadcast();
+  }
+
+  function deployUsdxQueue() public {
+    usdxQueue = new UsdxQueue(address(usdx), address(consol), deployerAddress);
+
+    // Grant admin role to admins
+    for (uint256 i = 0; i < admins.length; i++) {
+      UsdxQueue(address(usdxQueue)).grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]);
+    }
+
+    // Renounce admin role
+    UsdxQueue(address(usdxQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+  }
+
+  function deployForfeitedAssetsQueue() public {
+    forfeitedAssetsQueue = new ForfeitedAssetsQueue(address(forfeitedAssetsPool), address(consol), deployerAddress);
+
+    // Grant admin role to admins
+    for (uint256 i = 0; i < admins.length; i++) {
+      ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]);
+    }
+
+    // Renounce admin role
+    ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+  }
+
+  function deployConversionQueues() public {
+    uint16 priceMultiplierBps = uint16(vm.envUint("CONVERSION_PRICE_MULTIPLIER_BPS"));
+    for (uint256 i = 0; i < collateralTokens.length; i++) {
+      // Fetch lump sum interest rate for the ith collateral
+      uint16 lumpSumInterestRateBps =
+        uint16(vm.envUint(string.concat("CONVERSION_LUMP_SUM_INTEREST_RATE_BPS_", vm.toString(i))));
+      uint16 paymentPlanLumpSumInterestRateBps =
+        uint16(vm.envUint(string.concat("CONVERSION_PAYMENT_PLAN_LUMP_SUM_INTEREST_RATE_BPS_", vm.toString(i))));
+
+      // Create conversionQueue for the ith collateral
+      ConversionQueue conversionQueue = new ConversionQueue(
+        address(collateralTokens[i]),
+        collateralTokens[i].decimals(),
+        address(subConsols[i]),
+        lumpSumInterestRateBps,
+        paymentPlanLumpSumInterestRateBps,
+        priceMultiplierBps,
+        address(consol),
+        address(generalManager),
+        deployerAddress
+      );
+
+      // Grant admin role to admins
+      for (uint256 j = 0; j < admins.length; j++) {
+        conversionQueue.grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[j]);
+      }
+
+      // Renounce admin role
+      conversionQueue.renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+
+      // Push to the array of collateralQueues
+      conversionQueues.push(conversionQueue);
+    }
+  }
+
+  function logUsdxQueue(string memory objectKey) public returns (string memory json) {
+    json = vm.serializeAddress(objectKey, "usdxQueue", address(usdxQueue));
+  }
+
+  function logForfeitedAssetsQueue(string memory objectKey) public returns (string memory json) {
+    json = vm.serializeAddress(objectKey, "forfeitedAssetsQueue", address(forfeitedAssetsQueue));
+  }
+
+  function logConversionQueues(string memory objectKey) public returns (string memory json) {
+    address[] memory addressList = new address[](conversionQueues.length);
+    for (uint256 i = 0; i < conversionQueues.length; i++) {
+      addressList[i] = address(conversionQueues[i]);
+    }
+    json = vm.serializeAddress(objectKey, "conversionQueues", addressList);
+  }
+}

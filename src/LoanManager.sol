@@ -1,0 +1,499 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
+import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ILoanManager} from "./interfaces/ILoanManager/ILoanManager.sol";
+import {MortgagePosition, MortgageStatus} from "./types/MortgagePosition.sol";
+import {IConsol} from "./interfaces/IConsol/IConsol.sol";
+import {IGeneralManager} from "./interfaces/IGeneralManager/IGeneralManager.sol";
+import {IMortgageNFT} from "./interfaces/IMortgageNFT/IMortgageNFT.sol";
+import {MortgageNFT} from "./MortgageNFT.sol";
+import {MortgageMath} from "./libraries/MortgageMath.sol";
+import {ISubConsol} from "./interfaces/ISubConsol/ISubConsol.sol";
+import {IForfeitedAssetsPool} from "./interfaces/IForfeitedAssetsPool/IForfeitedAssetsPool.sol";
+// solhint-disable-next-line no-unused-import
+import {IConsolFlashSwap} from "./interfaces/IConsolFlashSwap.sol";
+import {Constants} from "./libraries/Constants.sol";
+
+/**
+ * @title The LoanManager contract
+ * @author SocksNFlops
+ * @notice The LoanManager implementation contract
+ * @dev In order to minimize smart contract risk, we are hedging towards immutability.
+ */
+contract LoanManager is ILoanManager, ERC165, Context {
+  using SafeERC20 for IConsol;
+  using MortgageMath for MortgagePosition;
+
+  // Storage variables
+  /// @inheritdoc ILoanManager
+  address public immutable override consol;
+  /// @inheritdoc ILoanManager
+  address public immutable override generalManager;
+  /// @inheritdoc ILoanManager
+  address public immutable override nft;
+
+  /// @dev The mapping of tokenIds to mortgage positions
+  mapping(uint256 => MortgagePosition) private mortgagePositions;
+
+  /**
+   * @notice Constructor
+   * @param nftName The name of the NFT
+   * @param nftSymbol The symbol of the NFT
+   * @param _nftMetadataGenerator The address of the NFT metadata generator
+   * @param _consol The address of the Consol contract
+   * @param _generalManager The address of the GeneralManager contract
+   */
+  constructor(
+    string memory nftName,
+    string memory nftSymbol,
+    address _nftMetadataGenerator,
+    address _consol,
+    address _generalManager
+  ) {
+    consol = _consol;
+    generalManager = _generalManager;
+    nft = address(new MortgageNFT(nftName, nftSymbol, _generalManager, _nftMetadataGenerator));
+  }
+
+  /**
+   * @dev Calculates the number of missed payments and penalty amount for a mortgage position and updates them in memory (not storage)
+   * @param mortgagePosition The mortgage position to calculate the missed payments and penalty amount for
+   * @return outputMortgagePosition The updated mortgage position
+   * @return penaltyAmount The penalty amount
+   * @return additionalPaymentsMissed The number of missed payments
+   */
+  function _applyPendingMissedPayments(MortgagePosition memory mortgagePosition)
+    internal
+    view
+    returns (MortgagePosition memory outputMortgagePosition, uint256 penaltyAmount, uint8 additionalPaymentsMissed)
+  {
+    (outputMortgagePosition, penaltyAmount, additionalPaymentsMissed) = mortgagePosition.applyPenalties(
+      Constants.LATE_PAYMENT_WINDOW, IGeneralManager(generalManager).penaltyRate(mortgagePosition)
+    );
+  }
+
+  /**
+   * @dev Applies pending missed payments to a mortgage position and emits a penalty imposed event if a penalty was imposed
+   * @param tokenId The ID of the mortgage position
+   */
+  function _imposePenalty(uint256 tokenId) internal {
+    uint256 penaltyAmount;
+    uint8 additionalPaymentsMissed;
+    (mortgagePositions[tokenId], penaltyAmount, additionalPaymentsMissed) =
+      _applyPendingMissedPayments(mortgagePositions[tokenId]);
+
+    // Emit a penalty imposed event if a penalty was imposed
+    if (penaltyAmount > 0 || additionalPaymentsMissed > 0) {
+      emit PenaltyImposed(
+        tokenId,
+        penaltyAmount,
+        additionalPaymentsMissed,
+        mortgagePositions[tokenId].penaltyAccrued,
+        mortgagePositions[tokenId].paymentsMissed
+      );
+    }
+  }
+
+  /**
+   * @dev Modifier to apply penalties to a mortgage position before it is fetched and used or returned
+   * @param tokenId The ID of the mortgage position
+   */
+  modifier imposePenaltyBefore(uint256 tokenId) {
+    // Apply the pending missed payments to the mortgage position
+    _imposePenalty(tokenId);
+    _;
+  }
+
+  /**
+   * @dev Modifier to check if the caller is the general manager
+   */
+  modifier onlyGeneralManager() {
+    if (_msgSender() != generalManager) {
+      revert OnlyGeneralManager(_msgSender(), generalManager);
+    }
+    _;
+  }
+
+  /**
+   * @dev Validates that the caller is the owner of the mortgage
+   * @param tokenId The ID of the mortgage position
+   */
+  function _validateMortgageOwner(uint256 tokenId) internal view {
+    // Get the owner of the mortgage
+    address owner = IMortgageNFT(nft).ownerOf(tokenId);
+
+    // Validate that the caller is the owner of the mortgage
+    if (owner != _msgSender()) {
+      revert OnlyMortgageOwner(tokenId, owner, _msgSender());
+    }
+  }
+
+  /**
+   * @dev Modifier to check if the caller is the owner of the mortgage
+   * @param tokenId The ID of the mortgage position
+   */
+  modifier onlyMortgageOwner(uint256 tokenId) {
+    _validateMortgageOwner(tokenId);
+    _;
+  }
+
+  /**
+   * @dev Validates that the mortgage position exists and is active
+   * @param tokenId The ID of the mortgage position
+   */
+  function _validateMortgageExistsAndActive(uint256 tokenId) internal view {
+    // Validate that the mortgage position exists
+    if (mortgagePositions[tokenId].tokenId == 0) {
+      revert MortgagePositionDoesNotExist(tokenId);
+    }
+
+    // Validate that the mortgage position is active
+    if (mortgagePositions[tokenId].status != MortgageStatus.ACTIVE) {
+      revert MortgagePositionNotActive(tokenId, mortgagePositions[tokenId].status);
+    }
+  }
+
+  /**
+   * @dev Modifier to check if the mortgage position exists and is active
+   * @param tokenId The ID of the mortgage position
+   */
+  modifier mortgageExistsAndActive(uint256 tokenId) {
+    _validateMortgageExistsAndActive(tokenId);
+    _;
+  }
+
+  /**
+   * @inheritdoc ERC165
+   */
+  function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
+    return interfaceId == type(ILoanManager).interfaceId || super.supportsInterface(interfaceId);
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function createMortgage(
+    address owner,
+    uint256 tokenId,
+    address collateral,
+    uint8 collateralDecimals,
+    uint256 collateralAmount,
+    address subConsol,
+    uint16 interestRate,
+    uint256 amountBorrowed,
+    uint8 totalPeriods,
+    bool hasPaymentPlan
+  ) external override onlyGeneralManager {
+    // Validate that the amount borrowed is above a minimum threshold
+    if (amountBorrowed < Constants.MINIMUM_AMOUNT_BORROWED) {
+      revert AmountBorrowedBelowMinimum(amountBorrowed, Constants.MINIMUM_AMOUNT_BORROWED);
+    }
+
+    // Create a new mortgage position
+    mortgagePositions[tokenId] = MortgageMath.createNewMortgagePosition(
+      tokenId,
+      collateral,
+      collateralDecimals,
+      subConsol,
+      collateralAmount,
+      amountBorrowed,
+      interestRate,
+      totalPeriods,
+      hasPaymentPlan
+    );
+
+    // Approve the SubConsol contract to spend the collateral
+    IERC20(collateral).approve(subConsol, collateralAmount);
+
+    // Deposit the collateral into the SubConsol contract
+    ISubConsol(subConsol).depositCollateral(collateralAmount, amountBorrowed);
+
+    // Approve the Consol contract to spend the subConsol
+    IERC20(subConsol).approve(consol, amountBorrowed);
+
+    // Deposit the subConsol into the Consol contract
+    IConsol(consol).deposit(subConsol, amountBorrowed);
+
+    // Send all minted Consol to the caller (general manager)
+    IConsol(consol).safeTransfer(generalManager, IConsol(consol).balanceOf(address(this)));
+
+    // Emit a create mortgage event
+    emit CreateMortgage(tokenId, owner, collateral, collateralAmount, amountBorrowed);
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function getMortgagePosition(uint256 tokenId)
+    external
+    view
+    override
+    returns (MortgagePosition memory outputMortgagePosition)
+  {
+    (outputMortgagePosition,,) = _applyPendingMissedPayments(mortgagePositions[tokenId]);
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function imposePenalty(uint256 tokenId)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+  // solhint-disable-next-line no-empty-blocks
+  {}
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function periodPay(uint256 tokenId, uint256 amount)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+  {
+    uint256 principalPayment;
+    (mortgagePositions[tokenId], principalPayment) =
+      mortgagePositions[tokenId].periodPay(amount, Constants.LATE_PAYMENT_WINDOW);
+
+    // Pull Consol from the user
+    IConsol(consol).safeTransferFrom(_msgSender(), address(this), amount);
+
+    // Withdraw the principalPayment amount of SubConsol from the Consol contract
+    IConsol(consol).withdraw(mortgagePositions[tokenId].subConsol, principalPayment);
+
+    // Burn the suprlus tokens accumulated in the loan manager (this represents interest getting redistributed to existing Consol holders)
+    IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
+
+    // Emit a period pay event
+    emit PeriodPay(tokenId, amount, mortgagePositions[tokenId].periodsPaid());
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function penaltyPay(uint256 tokenId, uint256 amount)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+  {
+    // Update the mortgage position with the penalty payment
+    mortgagePositions[tokenId] = mortgagePositions[tokenId].penaltyPay(amount);
+
+    // Pull the tokens from the user
+    IConsol(consol).safeTransferFrom(_msgSender(), address(this), amount);
+
+    // Forfeit the tokens in the Consol contract (distributed as interest to Consol holders)
+    IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
+
+    // Emit a penalty pay event
+    emit PenaltyPay(tokenId, amount);
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function redeemMortgage(uint256 tokenId, bool async)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+    onlyMortgageOwner(tokenId)
+  {
+    // Fetch the mortgage position
+    MortgagePosition memory mortgagePosition = mortgagePositions[tokenId];
+
+    // Update the mortgage position to be redeemed
+    mortgagePositions[tokenId] = mortgagePositions[tokenId].redeem();
+
+    // Burn the receipt NFT
+    IGeneralManager(generalManager).burnMortgageNFT(tokenId);
+
+    if (async) {
+      // Pull out the collateral from the subConsol that has been escrowed and send it to the caller
+      ISubConsol(mortgagePosition.subConsol).withdrawCollateral(
+        _msgSender(),
+        mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
+        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
+      );
+    } else {
+      // Asynchronously pull out the collateral from the subConsol that has been escrowed and send it to the caller
+      ISubConsol(mortgagePosition.subConsol).withdrawCollateralAsync(
+        _msgSender(),
+        mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
+        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
+      );
+    }
+
+    // Emit a redeem mortgage event
+    emit RedeemMortgage(tokenId);
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function refinanceMortgage(uint256 tokenId, uint8 totalPeriods)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+    onlyMortgageOwner(tokenId)
+  {
+    // Fetch the mortgage position
+    MortgagePosition memory mortgagePosition = mortgagePositions[tokenId];
+
+    // Fetch the interest rate
+    uint16 interestRate = IGeneralManager(generalManager).interestRate(
+      mortgagePosition.collateral, totalPeriods, mortgagePosition.hasPaymentPlan
+    );
+
+    // Update the mortgage position to be refinanced
+    uint256 refinanceFee;
+    (mortgagePositions[tokenId], refinanceFee) = mortgagePositions[tokenId].refinance(
+      IGeneralManager(generalManager).refinanceRate(mortgagePosition), interestRate, totalPeriods
+    );
+
+    // Send the refinance fee from the caller to the insurance fund
+    IConsol(consol).safeTransferFrom(_msgSender(), IGeneralManager(generalManager).insuranceFund(), refinanceFee);
+
+    // Emit a refinance mortgage event
+    emit RefinanceMortgage(
+      tokenId, block.timestamp, refinanceFee, interestRate, mortgagePositions[tokenId].amountOutstanding()
+    );
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function forecloseMortgage(uint256 tokenId)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+  {
+    // Update the mortgage position to be foreclosed
+    mortgagePositions[tokenId] = mortgagePositions[tokenId].foreclose(Constants.MAXIMUM_MISSED_PAYMENTS);
+
+    // Cache the mortgage position
+    MortgagePosition memory mortgagePosition = mortgagePositions[tokenId];
+
+    // Burn the receipt NFT
+    IGeneralManager(generalManager).burnMortgageNFT(tokenId);
+
+    // Execute a flash-swap to pull out the SubConsol and replace it with at least as much forfeited assets pool tokens
+    IConsol(consol).flashSwap(
+      IConsol(consol).forfeitedAssetsPool(),
+      mortgagePosition.subConsol,
+      mortgagePosition.amountOutstanding(),
+      abi.encode(mortgagePosition)
+    );
+
+    // Emit a foreclose mortgage event
+    emit ForecloseMortgage(tokenId);
+  }
+
+  /**
+   * @inheritdoc IConsolFlashSwap
+   * @dev Used to facilitate foreclosures
+   */
+  function flashSwapCallback(address inputToken, address outputToken, uint256 amount, bytes calldata data) external {
+    // Validate that the caller is the Consol contract
+    if (_msgSender() != address(consol)) {
+      revert OnlyConsol(_msgSender(), address(consol));
+    }
+
+    // Decode the callback data
+    MortgagePosition memory mortgagePosition = abi.decode(data, (MortgagePosition));
+    // Fetch the forfeited assets pool
+    address forfeitedAssetsPool = IConsol(consol).forfeitedAssetsPool();
+
+    if (inputToken == forfeitedAssetsPool && outputToken == mortgagePosition.subConsol) {
+      // Fetch the forfeited amount (this is extra SubConsol in LoanManager corresopnding to principal that was previously paid off)
+      uint256 amountForfeited = MortgageMath.amountForfeited(mortgagePosition);
+
+      // Pull out the collateral from the subConsol that was just pulled (plus the forfeited amount)
+      ISubConsol(outputToken).withdrawCollateral(
+        address(this),
+        mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
+        amount + amountForfeited
+      );
+
+      // Approving the collateral to the forfeited assets pool
+      IERC20(mortgagePosition.collateral).approve(
+        forfeitedAssetsPool, mortgagePosition.collateralAmount - mortgagePosition.collateralConverted
+      );
+
+      // Send the collateral to the forfeited assets pool
+      IForfeitedAssetsPool(forfeitedAssetsPool).depositAsset(
+        mortgagePosition.collateral, mortgagePosition.collateralAmount - mortgagePosition.collateralConverted, amount
+      );
+
+      // Transfer the forfeited assets pool tokens directly to the Consol contract
+      IERC20(forfeitedAssetsPool).transfer(address(consol), amount);
+    }
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function convertMortgage(uint256 tokenId, uint256 amount, uint256 collateralAmount)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+    onlyGeneralManager
+  {
+    // Update the mortgage position to be converted
+    mortgagePositions[tokenId] = mortgagePositions[tokenId].convert(amount, collateralAmount);
+
+    // Emit a convert mortgage event
+    emit ConvertMortgage(tokenId, amount, collateralAmount);
+  }
+
+  /**
+   * @inheritdoc ILoanManager
+   */
+  function expandBalanceSheet(
+    uint256 tokenId,
+    uint256 amountIn,
+    uint256 collateralAmountIn,
+    uint16 newInterestRate,
+    uint8 newTotalPeriods
+  ) external override mortgageExistsAndActive(tokenId) imposePenaltyBefore(tokenId) onlyGeneralManager {
+    // Validate that amountIn (the new amount being borrowed) is above a minimum threshold
+    if (amountIn < Constants.MINIMUM_AMOUNT_BORROWED) {
+      revert AmountBorrowedBelowMinimum(amountIn, Constants.MINIMUM_AMOUNT_BORROWED);
+    }
+
+    // Update the mortgage position to be expanded
+    mortgagePositions[tokenId] =
+      mortgagePositions[tokenId].expandBalanceSheet(amountIn, collateralAmountIn, newInterestRate, newTotalPeriods);
+
+    // Cache the mortgage position
+    MortgagePosition memory mortgagePosition = mortgagePositions[tokenId];
+
+    // Emit a expand balance sheet event
+    emit ExpandBalanceSheet(tokenId, amountIn, collateralAmountIn, newInterestRate, newTotalPeriods);
+
+    // Approve the SubConsol contract to spend the collateral
+    IERC20(mortgagePosition.collateral).approve(mortgagePosition.subConsol, collateralAmountIn);
+
+    // Deposit the collateral into the SubConsol contract
+    ISubConsol(mortgagePosition.subConsol).depositCollateral(collateralAmountIn, amountIn);
+
+    // Approve the Consol contract to spend the subConsol
+    IERC20(mortgagePosition.subConsol).approve(consol, amountIn);
+
+    // Deposit the subConsol into the Consol contract
+    IConsol(consol).deposit(mortgagePosition.subConsol, amountIn);
+
+    // Send all minted Consol to the caller (general manager)
+    IConsol(consol).safeTransfer(generalManager, IConsol(consol).balanceOf(address(this)));
+  }
+}

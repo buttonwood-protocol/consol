@@ -1,0 +1,45 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.20;
+
+import {PurchaseOrder} from "../../types/orders/PurchaseOrder.sol";
+
+/**
+ * @title IOrderPoolEvents
+ * @author SocksNFlops
+ * @notice Events for the OrderPool contract
+ */
+interface IOrderPoolEvents {
+  /**
+   * @notice Emitted when the gas fee is updated
+   * @param gasFee The new gas fee
+   */
+  event GasFeeUpdated(uint256 gasFee);
+
+  /**
+   * @notice Emitted when a purchase order is added
+   * @param index The index of the purchase order
+   * @param owner The owner of the mortgage being created
+   * @param originationPool The address of the origination pool to deploy funds from
+   * @param collateral The address of the collateral token
+   * @param order The purchase order
+   */
+  event PurchaseOrderAdded(
+    uint256 index,
+    address indexed owner,
+    address indexed originationPool,
+    address indexed collateral,
+    PurchaseOrder order
+  );
+
+  /**
+   * @notice Emitted when a purchase order is marked as expired
+   * @param index The index of the purchase order
+   */
+  event PurchaseOrderExpired(uint256 indexed index);
+
+  /**
+   * @notice Emitted when a purchase order is filled
+   * @param index The index of the purchase order
+   */
+  event PurchaseOrderFilled(uint256 indexed index);
+}

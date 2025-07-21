@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: UNLICENSED
+pragma solidity ^0.8.13;
+
+import {BaseTest} from "./BaseTest.t.sol";
+import {PythInterestRateOracle} from "../src/PythInterestRateOracle.sol";
+import {IInterestRateOracle} from "../src/interfaces/IInterestRateOracle.sol";
+import {MockPyth} from "./mocks/MockPyth.sol";
+import {PythStructs} from "@pythnetwork/PythStructs.sol";
+
+contract PythInterestRateOracleTest is BaseTest {
+  // Contracts
+  PythInterestRateOracle public pythInterestRateOracle;
+
+  function setUp() public override {
+    super.setUp();
+    pythInterestRateOracle = PythInterestRateOracle(address(interestRateOracle));
+  }
+
+  function test_constructor() public view {
+    assertEq(
+      address(PythInterestRateOracle(address(pythInterestRateOracle)).pyth()),
+      address(mockPyth),
+      "Pyth address mismatch"
+    );
+  }
+
+  function test_interestRate_invalidTotalPeriods(uint8 totalPeriods, bool hasPaymentPlan) public {
+    // Ensure the total periods are invalid
+    vm.assume(totalPeriods != 36 && totalPeriods != 60);
+    vm.expectRevert(abi.encodeWithSelector(PythInterestRateOracle.InvalidTotalPeriods.selector, totalPeriods));
+    pythInterestRateOracle.interestRate(totalPeriods, hasPaymentPlan);
+  }
+
+  function test_interestRate_sampleValues(bool hasPaymentPlan) public {
+    mockPyth.setPrice(TREASURY_3YR_ID, 401900002, 434412, -8, block.timestamp);
+    uint16 interestRate = pythInterestRateOracle.interestRate(DEFAULT_MORTGAGE_PERIODS, hasPaymentPlan);
+    if (hasPaymentPlan) {
+      assertEq(interestRate, 903, "Interest rate mismatch");
+    } else {
+      assertEq(interestRate, 1003, "Interest rate mismatch");
+    }
+  }
+}

@@ -1,0 +1,5 @@
+@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts
+@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts
+@mock-contracts/=lib/mock-contracts/src
+forge-std/=lib/forge-std/src
+@pythnetwork/=lib/pyth-crosschain/target_chains/ethereum/sdk/solidity
