@@ -589,7 +589,12 @@ contract GeneralManager is
   /**
    * @inheritdoc IGeneralManager
    */
-  function requestMortgageCreation(CreationRequest calldata creationRequest) external payable whenNotPaused {
+  function requestMortgageCreation(CreationRequest calldata creationRequest)
+    external
+    payable
+    whenNotPaused
+    returns (uint256 tokenId)
+  {
     // If compounding, a conversion queue must be provided
     if (creationRequest.base.isCompounding && creationRequest.base.conversionQueue == address(0)) {
       revert CompoundingMustConvert(creationRequest);
@@ -600,7 +605,7 @@ contract GeneralManager is
     }
 
     // Mint the mortgage NFT to the _msgSender()
-    uint256 tokenId = IMortgageNFT(mortgageNFT()).mint(_msgSender(), creationRequest.mortgageId);
+    tokenId = IMortgageNFT(mortgageNFT()).mint(_msgSender(), creationRequest.mortgageId);
 
     _sendRequest(
       creationRequest.base,

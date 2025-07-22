@@ -191,8 +191,9 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
   /**
    * @notice Requests a new mortgage creation
    * @param creationRequest The parameters of the mortgage creation being requested
+   * @return tokenId The tokenId of the mortgage NFT that was created
    */
-  function requestMortgageCreation(CreationRequest calldata creationRequest) external payable;
+  function requestMortgageCreation(CreationRequest calldata creationRequest) external payable returns (uint256 tokenId);
 
   /**
    * @notice Burns a mortgage NFT
