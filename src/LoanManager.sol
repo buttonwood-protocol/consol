@@ -316,15 +316,15 @@ contract LoanManager is ILoanManager, ERC165, Context {
     IGeneralManager(generalManager).burnMortgageNFT(tokenId);
 
     if (async) {
-      // Pull out the collateral from the subConsol that has been escrowed and send it to the caller
-      ISubConsol(mortgagePosition.subConsol).withdrawCollateral(
+      // Asynchronously pull out the collateral from the subConsol that has been escrowed and send it to the caller
+      ISubConsol(mortgagePosition.subConsol).withdrawCollateralAsync(
         _msgSender(),
         mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
         mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
       );
     } else {
-      // Asynchronously pull out the collateral from the subConsol that has been escrowed and send it to the caller
-      ISubConsol(mortgagePosition.subConsol).withdrawCollateralAsync(
+      // Pull out the collateral from the subConsol that has been escrowed and send it to the caller
+      ISubConsol(mortgagePosition.subConsol).withdrawCollateral(
         _msgSender(),
         mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
         mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
