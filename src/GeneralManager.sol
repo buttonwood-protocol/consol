@@ -253,6 +253,8 @@ contract GeneralManager is
 
   /**
    * @dev Modifier to both check if the caller has sent enough gas and to refund the surplus
+   * @param usingOrderPool Whether the caller is using the order pool
+   * @param conversionQueue The address of the conversion queue
    */
   modifier sufficientGasFeeAndRefund(bool usingOrderPool, address conversionQueue) {
     uint256 requiredGasFee = _checkSufficientGas(usingOrderPool, conversionQueue);
