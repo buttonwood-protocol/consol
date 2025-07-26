@@ -1607,10 +1607,7 @@ contract GeneralManagerTest is BaseTest {
     assertEq(wbtc.balanceOf(address(generalManager)), 0, "GeneralManager should have 0 Collateral");
   }
 
-  function test_enqueueMortgage(
-    CreationRequest memory createRequestSeed,
-    uint256 gasFee
-  ) public {
+  function test_enqueueMortgage(CreationRequest memory createRequestSeed, uint256 gasFee) public {
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
     creationRequest.base.isCompounding = false;
@@ -1687,7 +1684,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Skip to the origination pool's deploy phase
     vm.warp(originationPool.deployPhaseTimestamp());
-    
+
     // The order pool calls originate
     vm.startPrank(address(orderPool));
     generalManager.originate(originationParameters);
