@@ -444,6 +444,11 @@ contract OriginationPoolScheduler is
     // Get the config
     OriginationPoolConfig memory config = $._oPoolConfigs[oPoolConfigId];
 
+    // Check that the config actually exists
+    if (config.consol == address(0)) {
+      revert OriginationPoolConfigIdDoesNotExist(oPoolConfigId);
+    }
+
     // Get the last deployment record
     LastDeploymentRecord memory lastDeploymentRecord = $._oPoolLastDeploymentRecords[oPoolConfigId];
 

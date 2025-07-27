@@ -25,6 +25,12 @@ contract OriginationPoolSchedulerTest is BaseTest {
 
   OriginationPoolScheduler public originationPoolSchedulerImplementation;
 
+  modifier ensureValidConfig(OriginationPoolConfig memory config) {
+    // Make sure config.consol is not address(0) during test
+    vm.assume(config.consol != address(0));
+    _;
+  }
+
   function setUp() public override {
     super.setUp();
     originationPoolSchedulerImplementation = new OriginationPoolScheduler();
@@ -260,7 +266,7 @@ contract OriginationPoolSchedulerTest is BaseTest {
     assertEq(originationPoolScheduler.currentEpoch(), uint256(numWeeks) + 1, "Current epoch should be as expected");
   }
 
-  function test_deployOriginationPool(OriginationPoolConfig memory config) public {
+  function test_deployOriginationPool(OriginationPoolConfig memory config) public ensureValidConfig(config) {
     // Add the config
     vm.startPrank(admin);
     originationPoolScheduler.addConfig(config);
@@ -321,7 +327,10 @@ contract OriginationPoolSchedulerTest is BaseTest {
     );
   }
 
-  function test_deployOriginationPool_revertWhenAlreadyDeployedInSameEpoch(OriginationPoolConfig memory config) public {
+  function test_deployOriginationPool_revertWhenAlreadyDeployedInSameEpoch(OriginationPoolConfig memory config)
+    public
+    ensureValidConfig(config)
+  {
     // Add the config
     vm.startPrank(admin);
     originationPoolScheduler.addConfig(config);
@@ -347,7 +356,10 @@ contract OriginationPoolSchedulerTest is BaseTest {
     vm.stopPrank();
   }
 
-  function test_deployOriginationPool_newEpochUnreachedPoolLimit(OriginationPoolConfig memory config) public {
+  function test_deployOriginationPool_newEpochUnreachedPoolLimit(OriginationPoolConfig memory config)
+    public
+    ensureValidConfig(config)
+  {
     // Make sure pool limit is greater than 0
     config.defaultPoolLimit = bound(config.defaultPoolLimit, 1, type(uint256).max);
 
@@ -373,7 +385,10 @@ contract OriginationPoolSchedulerTest is BaseTest {
     assertEq(originationPool1.poolLimit(), originationPool2.poolLimit(), "Pool limits should be the same");
   }
 
-  function test_deployOriginationPool_newEpochIncreasePoolLimit(OriginationPoolConfig memory config) public {
+  function test_deployOriginationPool_newEpochIncreasePoolLimit(OriginationPoolConfig memory config)
+    public
+    ensureValidConfig(config)
+  {
     // Make sure pool limit is greater than 0
     // Also make sure it's not going to overflow when scaled up
     config.defaultPoolLimit = bound(config.defaultPoolLimit, 1, type(uint224).max);
@@ -411,7 +426,20 @@ contract OriginationPoolSchedulerTest is BaseTest {
     );
   }
 
-  function test_predictOriginationPool(OriginationPoolConfig memory config) public {
+  function test_deployOriginationPool_revertWhenOPoolConfigIdDoesNotExist(OriginationPoolConfig memory config) public {
+    // Ensure the config is not added
+    assertEq(originationPoolScheduler.configLength(), 0, "Config should not be added");
+
+    // Deploy the origination pool
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IOriginationPoolSchedulerErrors.OriginationPoolConfigIdDoesNotExist.selector, config.toId()
+      )
+    );
+    originationPoolScheduler.deployOriginationPool(config.toId());
+  }
+
+  function test_predictOriginationPool(OriginationPoolConfig memory config) public ensureValidConfig(config) {
     // Make sure pool limit is greater than 0
     // Also make sure it's not going to overflow when scaled up
     config.defaultPoolLimit = bound(config.defaultPoolLimit, 1, type(uint224).max);
