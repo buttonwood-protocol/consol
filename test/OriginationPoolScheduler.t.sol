@@ -327,7 +327,10 @@ contract OriginationPoolSchedulerTest is BaseTest {
     );
   }
 
-  function test_deployOriginationPool_revertWhenAlreadyDeployedInSameEpoch(OriginationPoolConfig memory config) public ensureValidConfig(config) {
+  function test_deployOriginationPool_revertWhenAlreadyDeployedInSameEpoch(OriginationPoolConfig memory config)
+    public
+    ensureValidConfig(config)
+  {
     // Add the config
     vm.startPrank(admin);
     originationPoolScheduler.addConfig(config);
@@ -353,7 +356,10 @@ contract OriginationPoolSchedulerTest is BaseTest {
     vm.stopPrank();
   }
 
-  function test_deployOriginationPool_newEpochUnreachedPoolLimit(OriginationPoolConfig memory config) public ensureValidConfig(config) {
+  function test_deployOriginationPool_newEpochUnreachedPoolLimit(OriginationPoolConfig memory config)
+    public
+    ensureValidConfig(config)
+  {
     // Make sure pool limit is greater than 0
     config.defaultPoolLimit = bound(config.defaultPoolLimit, 1, type(uint256).max);
 
@@ -379,7 +385,10 @@ contract OriginationPoolSchedulerTest is BaseTest {
     assertEq(originationPool1.poolLimit(), originationPool2.poolLimit(), "Pool limits should be the same");
   }
 
-  function test_deployOriginationPool_newEpochIncreasePoolLimit(OriginationPoolConfig memory config) public ensureValidConfig(config) {
+  function test_deployOriginationPool_newEpochIncreasePoolLimit(OriginationPoolConfig memory config)
+    public
+    ensureValidConfig(config)
+  {
     // Make sure pool limit is greater than 0
     // Also make sure it's not going to overflow when scaled up
     config.defaultPoolLimit = bound(config.defaultPoolLimit, 1, type(uint224).max);
@@ -422,7 +431,11 @@ contract OriginationPoolSchedulerTest is BaseTest {
     assertEq(originationPoolScheduler.configLength(), 0, "Config should not be added");
 
     // Deploy the origination pool
-    vm.expectRevert(abi.encodeWithSelector(IOriginationPoolSchedulerErrors.OriginationPoolConfigIdDoesNotExist.selector, config.toId()));
+    vm.expectRevert(
+      abi.encodeWithSelector(
+        IOriginationPoolSchedulerErrors.OriginationPoolConfigIdDoesNotExist.selector, config.toId()
+      )
+    );
     originationPoolScheduler.deployOriginationPool(config.toId());
   }
 
