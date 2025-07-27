@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {OriginationPoolConfig} from "../../types/OriginationPoolConfig.sol";
+import {OPoolConfigId} from "../../types/OPoolConfigId.sol";
 
 interface IOriginationPoolSchedulerErrors {
   /**
@@ -32,4 +33,10 @@ interface IOriginationPoolSchedulerErrors {
   error OriginationPoolAlreadyDeployedThisEpoch(
     OriginationPoolConfig oPoolConfig, address deploymentAddress, uint256 deploymentEpoch, uint256 deploymentTimestamp
   );
+
+  /**
+   * @notice The origination pool config id does not exist
+   * @param oPoolConfigId The origination pool config id that does not exist
+   */
+  error OriginationPoolConfigIdDoesNotExist(OPoolConfigId oPoolConfigId);
 }
