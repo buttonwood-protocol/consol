@@ -411,11 +411,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 fulfillerEndingNativeBalance = address(fulfiller).balance;
 
     // Validate that the fulfiller's native balance has increased by only the order pool gas fee
-    assertEq(
-      fulfillerEndingNativeBalance,
-      fulfillerStartingNativeBalance + orderPoolGasFee,
-      "Native balance mismatch"
-    );
+    assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
 
     // Validate that the order was deleted
     assertEq(orderPool.orders(0).originationPool, address(0), "Origination pool should be 0");
@@ -546,11 +542,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 fulfillerEndingNativeBalance = address(fulfiller).balance;
 
     // Validate that the fulfiller's native balance has increased by only the order pool gas fee
-    assertEq(
-      fulfillerEndingNativeBalance,
-      fulfillerStartingNativeBalance + orderPoolGasFee,
-      "Native balance mismatch"
-    );
+    assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
 
     // Validate that the fulfiller has sold the collateral and received the purchaseAmount
     assertEq(ERC20Mock(address(wbtc)).balanceOf(fulfiller), 0, "Fulfiller collateral balance mismatch");
@@ -684,11 +676,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 fulfillerEndingNativeBalance = address(fulfiller).balance;
 
     // Validate that the fulfiller's native balance has increased by only the order pool gas fee
-    assertEq(
-      fulfillerEndingNativeBalance,
-      fulfillerStartingNativeBalance + orderPoolGasFee,
-      "Native balance mismatch"
-    );
+    assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
 
     // Validate that the fulfiller has sold the collateral and received the purchaseAmount
     assertEq(ERC20Mock(address(wbtc)).balanceOf(fulfiller), 0, "Fulfiller collateral balance mismatch");
