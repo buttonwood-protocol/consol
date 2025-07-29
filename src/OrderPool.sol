@@ -174,6 +174,9 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       // Delete the order
       delete _orders[index];
 
+      // Collected the conversion queue gas fee
+      collectedGasFee += order.conversionQueueGasFee;
+
       // Emit the PurchaseOrderExpired event
       emit PurchaseOrderExpired(index);
     } else {
@@ -208,7 +211,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       emit PurchaseOrderFilled(index);
     }
     // Record the amount of gas to reimburse
-    collectedGasFee = order.orderPoolGasFee;
+    collectedGasFee += order.orderPoolGasFee;
 
     // Delete the order
     delete _orders[index];

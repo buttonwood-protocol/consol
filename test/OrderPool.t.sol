@@ -410,8 +410,12 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Record the fulfiller's current native balance
     uint256 fulfillerEndingNativeBalance = address(fulfiller).balance;
 
-    // Validate that the fulfiller's native balance has increased by only the order pool gas fee
-    assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
+    // Validate that the fulfiller's native balance has increased by BOTH the order pool gas fee and the conversion queue gas fee
+    assertEq(
+      fulfillerEndingNativeBalance,
+      fulfillerStartingNativeBalance + orderPoolGasFee + conversionQueueGasFee,
+      "Native balance mismatch"
+    );
 
     // Validate that the order was deleted
     assertEq(orderPool.orders(0).originationPool, address(0), "Origination pool should be 0");
