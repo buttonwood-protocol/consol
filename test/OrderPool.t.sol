@@ -151,7 +151,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee,
     bool expansion
   ) public {
@@ -164,7 +164,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee
@@ -187,7 +187,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
       mortgageParams: mortgageParams,
       timestamp: block.timestamp,
       expiration: expiration,
-      conversionQueueGasFee: conversionQueueGasFee,
+      mortgageGasFee: mortgageGasFee,
       orderPoolGasFee: orderPoolGasFee,
       expansion: expansion
     });
@@ -223,7 +223,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     assertEq(orderPool.orders(0).timestamp, block.timestamp, "Timestamp mismatch");
     assertEq(orderPool.orders(0).expiration, expiration, "Expiration mismatch");
     assertEq(orderPool.orders(0).expansion, expansion, "Expansion mismatch");
-    assertEq(orderPool.orders(0).conversionQueueGasFee, conversionQueueGasFee, "Conversion queue gas fee mismatch");
+    assertEq(orderPool.orders(0).mortgageGasFee, mortgageGasFee, "Mortgage gas fee mismatch");
     assertEq(orderPool.orders(0).orderPoolGasFee, orderPoolGasFee, "Order pool gas fee mismatch");
 
     // Validate that order count was incremented
@@ -237,7 +237,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee,
     bool expansion
   ) public {
@@ -250,7 +250,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee
@@ -272,7 +272,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
       mortgageParams: mortgageParams,
       timestamp: block.timestamp,
       expiration: expiration,
-      conversionQueueGasFee: conversionQueueGasFee,
+      mortgageGasFee: mortgageGasFee,
       orderPoolGasFee: orderPoolGasFee,
       expansion: expansion
     });
@@ -307,7 +307,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     assertEq(orderPool.orders(0).mortgageParams.totalPeriods, DEFAULT_MORTGAGE_PERIODS, "Total periods mismatch");
     assertEq(orderPool.orders(0).timestamp, block.timestamp, "Timestamp mismatch");
     assertEq(orderPool.orders(0).expiration, expiration, "Expiration mismatch");
-    assertEq(orderPool.orders(0).conversionQueueGasFee, conversionQueueGasFee, "Conversion queue gas fee mismatch");
+    assertEq(orderPool.orders(0).mortgageGasFee, mortgageGasFee, "Mortgage gas fee mismatch");
     assertEq(orderPool.orders(0).orderPoolGasFee, orderPoolGasFee, "Order pool gas fee mismatch");
     assertEq(orderPool.orders(0).expansion, expansion, "Expansion mismatch");
 
@@ -338,7 +338,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee,
     bool expansion
   ) public {
@@ -346,7 +346,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     collateralAmount = bound(collateralAmount, 0, uint256(type(uint128).max));
 
     // Ensure that the gas fees don't overflow
-    conversionQueueGasFee = bound(conversionQueueGasFee, 0, type(uint256).max - orderPoolGasFee);
+    mortgageGasFee = bound(mortgageGasFee, 0, type(uint256).max - orderPoolGasFee);
 
     // Mock an NFT minted to the borrower to emulate requesting the mortgage
     vm.startPrank(address(generalManager));
@@ -359,7 +359,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee
@@ -368,7 +368,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     vm.stopPrank();
 
     // Deal the general manager the gas fee
-    vm.deal(address(generalManager), conversionQueueGasFee + orderPoolGasFee);
+    vm.deal(address(generalManager), mortgageGasFee + orderPoolGasFee);
 
     // Calculate the required amount of collateral to send the order
     orderAmounts.collateralCollected =
@@ -382,7 +382,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
-    orderPool.sendOrder{value: orderPoolGasFee + conversionQueueGasFee}(
+    orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(
       address(originationPool), address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
@@ -410,10 +410,10 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Record the fulfiller's current native balance
     uint256 fulfillerEndingNativeBalance = address(fulfiller).balance;
 
-    // Validate that the fulfiller's native balance has increased by BOTH the order pool gas fee and the conversion queue gas fee
+    // Validate that the fulfiller's native balance has increased by BOTH the order pool gas fee and the mortgage gas fee
     assertEq(
       fulfillerEndingNativeBalance,
-      fulfillerStartingNativeBalance + orderPoolGasFee + conversionQueueGasFee,
+      fulfillerStartingNativeBalance + orderPoolGasFee + mortgageGasFee,
       "Native balance mismatch"
     );
 
@@ -432,7 +432,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     assertEq(orderPool.orders(0).mortgageParams.totalPeriods, 0, "Total periods should be 0");
     assertEq(orderPool.orders(0).timestamp, 0, "Timestamp should be 0");
     assertEq(orderPool.orders(0).expiration, 0, "Expiration should be 0");
-    assertEq(orderPool.orders(0).conversionQueueGasFee, 0, "Conversion queue gas fee should be reset to 0");
+    assertEq(orderPool.orders(0).mortgageGasFee, 0, "Mortgage gas fee should be reset to 0");
     assertEq(orderPool.orders(0).orderPoolGasFee, 0, "Order pool gas fee should be reset to 0");
     assertEq(orderPool.orders(0).expansion, false, "Expansion  should default to false");
 
@@ -447,7 +447,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee
   ) public {
     // Ensure the tokenId is not 0
@@ -466,7 +466,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     collateralAmount = bound(collateralAmount, 1, uint256(type(uint128).max));
 
     // Ensure that the gas fees don't overflow
-    conversionQueueGasFee = bound(conversionQueueGasFee, 0, type(uint256).max - orderPoolGasFee);
+    mortgageGasFee = bound(mortgageGasFee, 0, type(uint256).max - orderPoolGasFee);
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
@@ -474,7 +474,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee
@@ -483,7 +483,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     vm.stopPrank();
 
     // Deal the general manager the gas fees
-    vm.deal(address(generalManager), conversionQueueGasFee + orderPoolGasFee);
+    vm.deal(address(generalManager), mortgageGasFee + orderPoolGasFee);
 
     // Deal amountBorrowed of usdx to lender and have them deposit it into the origination pool
     _mintUsdx(lender, amountBorrowed);
@@ -507,7 +507,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
-    orderPool.sendOrder{value: orderPoolGasFee + conversionQueueGasFee}(
+    orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(
       address(originationPool),
       address(conversionQueue),
       orderAmounts,
@@ -570,7 +570,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     assertEq(orderPool.orders(0).mortgageParams.hasPaymentPlan, false, "hasPaymentPlan should be true");
     assertEq(orderPool.orders(0).timestamp, 0, "Timestamp should be 0");
     assertEq(orderPool.orders(0).expiration, 0, "Expiration should be 0");
-    assertEq(orderPool.orders(0).conversionQueueGasFee, 0, "Conversion queue gas fee should be 0");
+    assertEq(orderPool.orders(0).mortgageGasFee, 0, "Mortgage gas fee should be 0");
     assertEq(orderPool.orders(0).orderPoolGasFee, 0, "Order pool gas fee should be 0");
     assertEq(orderPool.orders(0).expansion, false, "Expansion  should be false");
   }
@@ -582,7 +582,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee
   ) public {
     // Ensure the tokenId is not 0
@@ -601,7 +601,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     collateralAmount = bound(collateralAmount, 1, uint256(type(uint128).max));
 
     // Ensure that the gas fees don't overflow
-    conversionQueueGasFee = bound(conversionQueueGasFee, 0, type(uint256).max - orderPoolGasFee);
+    mortgageGasFee = bound(mortgageGasFee, 0, type(uint256).max - orderPoolGasFee);
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
@@ -609,7 +609,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -618,7 +618,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     vm.stopPrank();
 
     // Deal the general manager the gas fee
-    vm.deal(address(generalManager), conversionQueueGasFee + orderPoolGasFee);
+    vm.deal(address(generalManager), mortgageGasFee + orderPoolGasFee);
 
     // Deal amountBorrowed of usdx to lender and have them deposit it into the origination pool
     _mintUsdx(lender, amountBorrowed);
@@ -641,7 +641,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
-    orderPool.sendOrder{value: orderPoolGasFee + conversionQueueGasFee}(
+    orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(
       address(originationPool),
       address(conversionQueue),
       orderAmounts,
@@ -704,7 +704,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     assertEq(orderPool.orders(0).mortgageParams.hasPaymentPlan, false, "hasPaymentPlan should be false");
     assertEq(orderPool.orders(0).timestamp, 0, "Timestamp should be 0");
     assertEq(orderPool.orders(0).expiration, 0, "Expiration should be 0");
-    assertEq(orderPool.orders(0).conversionQueueGasFee, 0, "Conversion queue gas fee should be 0");
+    assertEq(orderPool.orders(0).mortgageGasFee, 0, "Mortgage gas fee should be 0");
     assertEq(orderPool.orders(0).orderPoolGasFee, 0, "Order pool gas fee should be 0");
     assertEq(orderPool.orders(0).expansion, false, "Expansion  should be false");
   }

@@ -452,7 +452,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_requestMortgageCreation_compoundingWithPaymentPlan(
     CreationRequest memory createRequestSeed,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee
   ) public {
     // Fuzz the create request
@@ -461,11 +461,11 @@ contract GeneralManagerTest is BaseTest {
     creationRequest.hasPaymentPlan = true;
 
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -474,7 +474,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower the gas fee
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -495,7 +495,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding mortgage with a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Validate that the order was enqueued in the order pool
@@ -542,24 +542,20 @@ contract GeneralManagerTest is BaseTest {
     assertEq(
       orderPool.orders(0).expiration, creationRequest.base.expiration, "Expiration should be the correct expiration"
     );
-    assertEq(
-      orderPool.orders(0).conversionQueueGasFee,
-      conversionQueueGasFee,
-      "Conversion queue gas fee should be the correct gas fee"
-    );
+    assertEq(orderPool.orders(0).mortgageGasFee, mortgageGasFee, "Mortgage gas fee should be the correct gas fee");
     assertEq(orderPool.orders(0).orderPoolGasFee, orderPoolGasFee, "Order pool gas fee should be the correct gas fee");
 
     // Validate that the orderPool received the gas fee
     assertEq(
       address(orderPool).balance,
-      orderPoolGasFee + conversionQueueGasFee,
-      "Order pool should have received both the order pool and conversion queue gas fees"
+      orderPoolGasFee + mortgageGasFee,
+      "Order pool should have received both the order pool and mortgage gas fees"
     );
   }
 
   function test_requestMortgageCreation_nonCompoundingWithPaymentPlan(
     CreationRequest memory createRequestSeed,
-    uint256 conversionQueueGasFee,
+    uint256 mortgageGasFee,
     uint256 orderPoolGasFee
   ) public {
     // Fuzz the create request
@@ -568,11 +564,11 @@ contract GeneralManagerTest is BaseTest {
     creationRequest.hasPaymentPlan = true;
 
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -581,7 +577,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower both the gas fees
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -603,7 +599,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a non-compounding mortgage with a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Validate that the order was enqueued in the order pool
@@ -650,18 +646,14 @@ contract GeneralManagerTest is BaseTest {
     assertEq(
       orderPool.orders(0).expiration, creationRequest.base.expiration, "Expiration should be the correct expiration"
     );
-    assertEq(
-      orderPool.orders(0).conversionQueueGasFee,
-      conversionQueueGasFee,
-      "Conversion queue gas fee should be the correct gas fee"
-    );
+    assertEq(orderPool.orders(0).mortgageGasFee, mortgageGasFee, "Mortgage gas fee should be the correct gas fee");
     assertEq(orderPool.orders(0).orderPoolGasFee, orderPoolGasFee, "Order pool gas fee should be the correct gas fee");
 
     // Validate that the orderPool received the gas fee
     assertEq(
       address(orderPool).balance,
-      orderPoolGasFee + conversionQueueGasFee,
-      "Order pool should have received both the order pool and conversion queue gas fees"
+      orderPoolGasFee + mortgageGasFee,
+      "Order pool should have received both the order pool and mortgage gas fees"
     );
   }
 
@@ -672,7 +664,7 @@ contract GeneralManagerTest is BaseTest {
     CreationRequest memory createRequestSeed,
     uint256 expiration,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Set the expiration to be between the deploy and redemption phase of the origination pool
     expiration =
@@ -684,11 +676,11 @@ contract GeneralManagerTest is BaseTest {
     creationRequest.base.isCompounding = true;
 
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -697,7 +689,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower both the gas fees
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -726,7 +718,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding mortgage with a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Skip ahead to the deploy phase of the origination pool
@@ -762,14 +754,14 @@ contract GeneralManagerTest is BaseTest {
     CreationRequest memory createRequestSeed,
     uint256 expiration,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Set the expiration to be between the deploy and redemption phase of the origination pool
     expiration =
       bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
 
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
@@ -778,7 +770,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -787,7 +779,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower both the gas fees
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -816,7 +808,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding mortgage with a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Skip ahead to the deploy phase of the origination pool
@@ -854,14 +846,14 @@ contract GeneralManagerTest is BaseTest {
     CreationRequest memory createRequestSeed,
     uint256 expiration,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Set the expiration to be between the deploy and redemption phase of the origination pool
     expiration =
       bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
 
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
@@ -871,7 +863,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -880,7 +872,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower both the gas fees
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -909,7 +901,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding mortgage with a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Skip ahead to the deploy phase of the origination pool
@@ -971,14 +963,14 @@ contract GeneralManagerTest is BaseTest {
     CreationRequest memory createRequestSeed,
     uint256 expiration,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Set the expiration to be between the deploy and redemption phase of the origination pool
     expiration =
       bound(expiration, originationPool.deployPhaseTimestamp(), originationPool.redemptionPhaseTimestamp() - 1);
 
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
@@ -988,7 +980,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -997,7 +989,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower both the gas fees
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -1029,7 +1021,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a non-compounding mortgage with a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Skip ahead to the deploy phase of the origination pool
@@ -1304,10 +1296,10 @@ contract GeneralManagerTest is BaseTest {
   function test_requestBalanceSheetExpansion_compounding(
     ExpansionRequest memory expansionRequestSeed,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the expansion request
     ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
@@ -1315,7 +1307,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -1324,7 +1316,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the balanceSheetExpander the gas fee
-    vm.deal(balanceSheetExpander, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -1354,7 +1346,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding balance sheet expansion
     vm.startPrank(balanceSheetExpander);
-    generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + conversionQueueGasFee}(expansionRequest);
+    generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + mortgageGasFee}(expansionRequest);
     vm.stopPrank();
 
     // Validate that the order was enqueued in the order pool
@@ -1406,28 +1398,24 @@ contract GeneralManagerTest is BaseTest {
     assertEq(
       orderPool.orders(0).expiration, expansionRequest.base.expiration, "Expiration should be the correct expiration"
     );
-    assertEq(
-      orderPool.orders(0).conversionQueueGasFee,
-      conversionQueueGasFee,
-      "Conversion queue gas fee should be the correct gas fee"
-    );
+    assertEq(orderPool.orders(0).mortgageGasFee, mortgageGasFee, "Mortgage gas fee should be the correct gas fee");
     assertEq(orderPool.orders(0).orderPoolGasFee, orderPoolGasFee, "Order pool gas fee should be the correct gas fee");
 
     // Validate that the orderPool received both the gas fees
     assertEq(
       address(orderPool).balance,
-      orderPoolGasFee + conversionQueueGasFee,
-      "Order pool should have received both the order pool and conversion queue gas fees"
+      orderPoolGasFee + mortgageGasFee,
+      "Order pool should have received both the order pool and mortgage gas fees"
     );
   }
 
   function test_requestBalanceSheetExpansion_nonCompounding(
     ExpansionRequest memory expansionRequestSeed,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the expansion request
     ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
@@ -1435,7 +1423,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -1444,7 +1432,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the balanceSheetExpander the gas fee
-    vm.deal(balanceSheetExpander, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -1476,7 +1464,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a non-compounding balance sheet expansion
     vm.startPrank(balanceSheetExpander);
-    generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + conversionQueueGasFee}(expansionRequest);
+    generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + mortgageGasFee}(expansionRequest);
     vm.stopPrank();
 
     // Validate that the order was enqueued in the order pool
@@ -1528,18 +1516,12 @@ contract GeneralManagerTest is BaseTest {
     assertEq(
       orderPool.orders(0).expiration, expansionRequest.base.expiration, "Expiration should be the correct expiration"
     );
-    assertEq(
-      orderPool.orders(0).conversionQueueGasFee,
-      conversionQueueGasFee,
-      "Conversion queue gas fee should be the correct gas fee"
-    );
+    assertEq(orderPool.orders(0).mortgageGasFee, mortgageGasFee, "Mortgage gas fee should be the correct gas fee");
     assertEq(orderPool.orders(0).orderPoolGasFee, orderPoolGasFee, "Order pool gas fee should be the correct gas fee");
 
     // Validate that the orderPool received both the gas fees
     assertEq(
-      address(orderPool).balance,
-      orderPoolGasFee + conversionQueueGasFee,
-      "Order pool should have received both the gas fees"
+      address(orderPool).balance, orderPoolGasFee + mortgageGasFee, "Order pool should have received both the gas fees"
     );
   }
 
@@ -1547,11 +1529,11 @@ contract GeneralManagerTest is BaseTest {
     CreationRequest memory createRequestSeed,
     ExpansionRequest memory expansionRequestSeed,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Ensuring the gas fees don't overflow
-    conversionQueueGasFee = bound(conversionQueueGasFee, 0, type(uint256).max / 2);
-    orderPoolGasFee = bound(orderPoolGasFee, 0, (type(uint256).max - 2 * conversionQueueGasFee) / 2);
+    mortgageGasFee = bound(mortgageGasFee, 0, type(uint256).max / 2);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, (type(uint256).max - 2 * mortgageGasFee) / 2);
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
@@ -1561,7 +1543,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Have the admin set the gas fee on the order pool
@@ -1570,7 +1552,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Deal the borrower all of the gas fees
-    vm.deal(borrower, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -1599,7 +1581,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding mortgage without a payment plan
     vm.startPrank(borrower);
-    generalManager.requestMortgageCreation{value: orderPoolGasFee + conversionQueueGasFee}(creationRequest);
+    generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
     // Skip ahead to the deploy phase of the origination pool
@@ -1632,7 +1614,7 @@ contract GeneralManagerTest is BaseTest {
     expansionRequest.base.isCompounding = true;
 
     // Deal the balanceSheetExpander both the gas fees
-    vm.deal(balanceSheetExpander, orderPoolGasFee + conversionQueueGasFee);
+    vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Update the oracle values (keep the same ones for simplicity)
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -1661,7 +1643,7 @@ contract GeneralManagerTest is BaseTest {
 
     // Request a compounding balance sheet expansion of the previous mortgage (tokenId should be 1 since it was the first mortgage)
     vm.startPrank(balanceSheetExpander);
-    generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + conversionQueueGasFee}(expansionRequest);
+    generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + mortgageGasFee}(expansionRequest);
     vm.stopPrank();
 
     // Calculate the creation return amount (this is the amount of consol that the origination pool will receive after deployment)
@@ -1726,10 +1708,10 @@ contract GeneralManagerTest is BaseTest {
   function test_enqueueMortgage(
     CreationRequest memory createRequestSeed,
     uint256 orderPoolGasFee,
-    uint256 conversionQueueGasFee
+    uint256 mortgageGasFee
   ) public {
     // Ensuring the gas fees don't overflow
-    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - conversionQueueGasFee);
+    orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
@@ -1815,15 +1797,15 @@ contract GeneralManagerTest is BaseTest {
 
     // Have the admin set the gas fee for enqueuing mortgages into the conversion queue
     vm.startPrank(admin);
-    conversionQueue.setMortgageGasFee(conversionQueueGasFee);
+    conversionQueue.setMortgageGasFee(mortgageGasFee);
     vm.stopPrank();
 
     // Deal the borrower the mortgage gas fee
-    vm.deal(borrower, conversionQueueGasFee);
+    vm.deal(borrower, mortgageGasFee);
 
     // Have the borrower enqueue the mortgage into the conversion queue
     vm.startPrank(borrower);
-    generalManager.enqueueMortgage{value: conversionQueueGasFee}(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage{value: mortgageGasFee}(1, address(conversionQueue), 0);
     vm.stopPrank();
 
     // Validate that the mortgage was enqueued into the conversion queue

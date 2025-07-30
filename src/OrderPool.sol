@@ -121,7 +121,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       mortgageParams: mortgageParams,
       timestamp: block.timestamp,
       expiration: expiration,
-      conversionQueueGasFee: conversionQueue == address(0) ? 0 : IConversionQueue(conversionQueue).mortgageGasFee(),
+      mortgageGasFee: conversionQueue == address(0) ? 0 : IConversionQueue(conversionQueue).mortgageGasFee(),
       orderPoolGasFee: gasFee,
       expansion: expansion
     });
@@ -174,8 +174,8 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       // Delete the order
       delete _orders[index];
 
-      // Collected the conversion queue gas fee
-      collectedGasFee += order.conversionQueueGasFee;
+      // Collected the mortgage gas fee
+      collectedGasFee += order.mortgageGasFee;
 
       // Emit the PurchaseOrderExpired event
       emit PurchaseOrderExpired(index);
@@ -195,7 +195,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       }
 
       // Originate the mortgage (fulfiller will receive back the purchaseAmount of USDX)
-      IGeneralManager(generalManager).originate{value: order.conversionQueueGasFee}(
+      IGeneralManager(generalManager).originate{value: order.mortgageGasFee}(
         OriginationParameters({
           mortgageParams: order.mortgageParams,
           fulfiller: _msgSender(),
