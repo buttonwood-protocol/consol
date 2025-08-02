@@ -241,7 +241,7 @@ contract MortgageMathTest is Test {
 
     // Attempt to overpay the mortgage and expect a revert
     uint256 refund;
-    (mortgagePosition,,refund) = mortgagePosition.periodPay(amount, latePaymentWindow);
+    (mortgagePosition,, refund) = mortgagePosition.periodPay(amount, latePaymentWindow);
 
     // Validate that the refund is correct (no termPaid yet)
     assertEq(refund, amount - mortgagePosition.termBalance, "refund should be the same as amount - termBalance");
@@ -284,17 +284,21 @@ contract MortgageMathTest is Test {
 
     // Make the first payment
     uint256 refund;
-    (mortgagePosition,,refund) = mortgagePosition.periodPay(amount1, latePaymentWindow);
+    (mortgagePosition,, refund) = mortgagePosition.periodPay(amount1, latePaymentWindow);
 
     // Validate that the refund is 0
     assertEq(refund, 0, "refund should be 0");
 
     // Attempt to make a second payment and expect a revert
     // vm.expectRevert(abi.encodeWithSelector(MortgageMath.CannotOverpay.selector, mortgagePosition, amount2));
-    (mortgagePosition,,refund) = mortgagePosition.periodPay(amount2, latePaymentWindow);
+    (mortgagePosition,, refund) = mortgagePosition.periodPay(amount2, latePaymentWindow);
 
     // Validate that the refund is correct
-    assertEq(refund, amount2 - (mortgagePosition.termBalance - amount1), "refund should be the same as amount2 - (termBalance - amount1)");
+    assertEq(
+      refund,
+      amount2 - (mortgagePosition.termBalance - amount1),
+      "refund should be the same as amount2 - (termBalance - amount1)"
+    );
   }
 
   function test_periodPay_hasPaymentPlan(
@@ -313,7 +317,8 @@ contract MortgageMathTest is Test {
     uint256 expectedPrincipalPaid = MortgageMath.convertPaymentToPrincipal(mortgagePosition, amount);
 
     // Pay the mortgage
-    uint256 principalPayment; uint256 refund;
+    uint256 principalPayment;
+    uint256 refund;
     (mortgagePosition, principalPayment, refund) = mortgagePosition.periodPay(amount, latePaymentWindow);
 
     // Validate the termPaid is correct and that amountPrior hasn't changed (still 0)
@@ -350,8 +355,10 @@ contract MortgageMathTest is Test {
     MortgagePosition memory oldMortgagePosition = mortgagePosition.copy();
 
     // Pay the mortgage
-    uint256 principalPayment; uint256 refund;
-    (mortgagePosition, principalPayment, refund) = mortgagePosition.periodPay(mortgagePosition.termBalance, latePaymentWindow);
+    uint256 principalPayment;
+    uint256 refund;
+    (mortgagePosition, principalPayment, refund) =
+      mortgagePosition.periodPay(mortgagePosition.termBalance, latePaymentWindow);
 
     // Validate the termPaid is correct and that amountPrior hasn't changed (still 0)
     assertEq(mortgagePosition.amountPrior, 0, "amountPrior should be 0");
@@ -814,7 +821,7 @@ contract MortgageMathTest is Test {
     penaltyAccrued = bound(penaltyAccrued, 1, type(uint256).max - 1);
     amount = bound(amount, penaltyAccrued + 1, type(uint256).max);
 
-    // Fuzz the mortgage position    
+    // Fuzz the mortgage position
     MortgagePosition memory mortgagePosition = _fuzzMortgagePositionWithSeed(mortgagePositionSeed);
 
     // Update the mortgage position with the penaltyAccrued
@@ -848,7 +855,7 @@ contract MortgageMathTest is Test {
     // Attempt to overpay the penalty and expect a revert
     vm.expectRevert(abi.encodeWithSelector(MortgageMath.CannotOverpayPenalty.selector, mortgagePosition, amount));
     (mortgagePosition,) = mortgagePosition.penaltyPay(amount);
-  } 
+  }
 
   function test_penaltyPay(MortgagePositionSeed memory mortgagePositionSeed, uint256 penaltyAccrued, uint256 amount)
     public

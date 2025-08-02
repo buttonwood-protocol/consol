@@ -257,7 +257,8 @@ contract LoanManager is ILoanManager, ERC165, Context {
     mortgageExistsAndActive(tokenId)
     imposePenaltyBefore(tokenId)
   {
-    uint256 principalPayment; uint256 refund;
+    uint256 principalPayment;
+    uint256 refund;
     (mortgagePositions[tokenId], principalPayment, refund) =
       mortgagePositions[tokenId].periodPay(amount, Constants.LATE_PAYMENT_WINDOW);
 
