@@ -83,14 +83,19 @@ contract ConsolTest is Test, IConsolEvents, IMultiTokenVaultEvents {
     vm.stopPrank();
   }
 
-  function test_setForfeitedAssetsPool_revertsIfDoesNotHaveSupportedTokenRole(address caller, address newForfeitedAssetsPool) public {
+  function test_setForfeitedAssetsPool_revertsIfDoesNotHaveSupportedTokenRole(
+    address caller,
+    address newForfeitedAssetsPool
+  ) public {
     // Make sure the caller doesn't have the supported token role
     vm.assume(!consol.hasRole(Roles.SUPPORTED_TOKEN_ROLE, caller));
 
     // Attempt to set the forfeited assets pool
     vm.startPrank(caller);
     vm.expectRevert(
-      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.SUPPORTED_TOKEN_ROLE)
+      abi.encodeWithSelector(
+        IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.SUPPORTED_TOKEN_ROLE
+      )
     );
     consol.setForfeitedAssetsPool(newForfeitedAssetsPool);
     vm.stopPrank();
@@ -113,10 +118,18 @@ contract ConsolTest is Test, IConsolEvents, IMultiTokenVaultEvents {
     vm.stopPrank();
 
     // Validate that the old forfeited assets pool has been removed from the supported tokens
-    assertEq(consol.isTokenSupported(address(forfeitedAssetsPool)), false, "The old forfeited assets pool should be removed from supported tokens");
+    assertEq(
+      consol.isTokenSupported(address(forfeitedAssetsPool)),
+      false,
+      "The old forfeited assets pool should be removed from supported tokens"
+    );
 
     // Validate that the new forfeited assets pool has been added to the supported tokens
-    assertEq(consol.isTokenSupported(newForfeitedAssetsPool), true, "The new forfeited assets pool should be added to supported tokens");
+    assertEq(
+      consol.isTokenSupported(newForfeitedAssetsPool),
+      true,
+      "The new forfeited assets pool should be added to supported tokens"
+    );
 
     // Validate that the forfeited assets pool has been set
     assertEq(consol.forfeitedAssetsPool(), newForfeitedAssetsPool, "Forfeited assets pool mismatch");
