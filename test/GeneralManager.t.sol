@@ -428,6 +428,42 @@ contract GeneralManagerTest is BaseTest {
     generalManager.requestMortgageCreation(creationRequest);
   }
 
+  function test_requestMortgageCreation_shouldRevertIfInvalidConversionQueue(CreationRequest memory createRequestSeed)
+    public
+  {
+    // Have admin revoke the conversion role from the conversion queue to make it invalid
+    vm.startPrank(admin);
+    IAccessControl(address(generalManager)).revokeRole(Roles.CONVERSION_ROLE, address(conversionQueue));
+    vm.stopPrank();
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+
+    // Attempt to request a mortgage with an invalid conversion queue
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.InvalidConversionQueue.selector, address(conversionQueue))
+    );
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
+  function test_requestMortgageCreation_shouldRevertIfInvalidSubConsol(
+    CreationRequest memory createRequestSeed,
+    address invalidSubConsol
+  ) public {
+    // Ensure that the subConsol is not supported
+    vm.assume(!IConsol(address(consol)).isTokenSupported(invalidSubConsol));
+
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.subConsol = invalidSubConsol;
+
+    // Attempt to request a mortgage with an invalid conversion queue
+    vm.expectRevert(
+      abi.encodeWithSelector(IGeneralManagerErrors.InvalidSubConsol.selector, invalidSubConsol, address(consol))
+    );
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
   function test_requestMortgageCreation_shouldRevertIfInvalidTotalPeriods(
     CreationRequest memory createRequestSeed,
     uint8 totalPeriods
