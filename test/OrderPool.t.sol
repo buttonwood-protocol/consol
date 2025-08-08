@@ -149,7 +149,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     MortgageParams memory mortgageParams,
     uint256 expiration,
     uint256 orderPoolGasFee,
-    bool expansion    
+    bool expansion
   ) public {
     // Ensure the expiration is in the past
     vm.assume(expiration < block.timestamp);
@@ -273,7 +273,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
   ) public {
     // Ensure the expiration is in the future
     expiration = bound(expiration, block.timestamp + 1, type(uint256).max);
-    
+
     // Ensure amountBorrowed is something reasonable to prevent overflows in the math
     amountBorrowed = bound(amountBorrowed, 0, uint256(type(uint128).max));
 
