@@ -95,10 +95,6 @@ contract DeployAllTest is Test {
     vm.setEnv("PYTH_PRICE_ID_1", "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43");
     vm.setEnv("PYTH_PRICE_MAX_CONFIDENCE_0", "100000000000000000");
     vm.setEnv("PYTH_PRICE_MAX_CONFIDENCE_1", "100000000000000000000");
-    vm.setEnv("CONVERSION_LUMP_SUM_INTEREST_RATE_BPS_0", "2000");
-    vm.setEnv("CONVERSION_PAYMENT_PLAN_LUMP_SUM_INTEREST_RATE_BPS_0", "1000");
-    vm.setEnv("CONVERSION_LUMP_SUM_INTEREST_RATE_BPS_1", "2000");
-    vm.setEnv("CONVERSION_PAYMENT_PLAN_LUMP_SUM_INTEREST_RATE_BPS_1", "1000");
     vm.setEnv("CONVERSION_PRICE_MULTIPLIER_BPS", "5000");
     deployAll = new DeployAll();
     deployAll.setTestAddressesFileSuffix(testId());

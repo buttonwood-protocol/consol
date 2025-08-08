@@ -137,9 +137,9 @@ contract MortgageMathTest is Test {
 
     // Validate dervied fields
     assertEq(
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       amountBorrowed,
-      "amountOutstanding should be the same as amountBorrowed since no payments have been made"
+      "principalRemaining should be the same as amountBorrowed since no payments have been made"
     );
     assertEq(mortgagePosition.periodsPaid(), 0, "periodsPaid should be 0 since no payments have been made");
     assertEq(
@@ -331,11 +331,11 @@ contract MortgageMathTest is Test {
     // Calculate the expected number of periods paid
     uint8 expectedPeriodsPaid = uint8(amount / expectedPeriodicPayment);
 
-    // Validate derived fields of periodsPaid and amountOutstanding
+    // Validate derived fields of periodsPaid and principalRemaining
     assertEq(
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       mortgagePosition.amountBorrowed - expectedPrincipalPaid,
-      "amountOutstanding should be the same as amountBorrowed - expectedPrincipalPaid"
+      "principalRemaining should be the same as amountBorrowed - expectedPrincipalPaid"
     );
     assertEq(principalPayment, expectedPrincipalPaid, "principalPayment should be the same as expectedPrincipalPaid");
     assertEq(
@@ -364,14 +364,14 @@ contract MortgageMathTest is Test {
     assertEq(mortgagePosition.amountPrior, 0, "amountPrior should be 0");
     assertEq(mortgagePosition.termPaid, oldMortgagePosition.termBalance, "termPaid should be the same as termBalance");
 
-    // Validate derived fields of periodsPaid and amountOutstanding
+    // Validate derived fields of periodsPaid and principalRemaining
     assertEq(
-      mortgagePosition.amountOutstanding(), 0, "amountOutstanding should be 0 (since entire termBalance was paid)"
+      mortgagePosition.principalRemaining(), 0, "principalRemaining should be 0 (since entire termBalance was paid)"
     );
     assertEq(
       principalPayment,
-      oldMortgagePosition.amountOutstanding(),
-      "principalPayment should be the same as amountOutstanding"
+      oldMortgagePosition.principalRemaining(),
+      "principalPayment should be the same as principalRemaining"
     );
     assertEq(
       mortgagePosition.periodsPaid(), oldMortgagePosition.totalPeriods, "periodsPaid should be the same as totalPeriods"
@@ -457,9 +457,9 @@ contract MortgageMathTest is Test {
 
     // Validate derived fields
     assertEq(
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       mortgagePosition.amountBorrowed,
-      "amountOutstanding should be the same as amountBorrowed"
+      "principalRemaining should be the same as amountBorrowed"
     );
     assertEq(mortgagePosition.periodsPaid(), 0, "periodsPaid should be 0");
     assertEq(
@@ -567,9 +567,9 @@ contract MortgageMathTest is Test {
 
     // Validate derived fields
     assertEq(
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       mortgagePosition.amountBorrowed,
-      "amountOutstanding should be the same as amountBorrowed"
+      "principalRemaining should be the same as amountBorrowed"
     );
     assertEq(mortgagePosition.periodsPaid(), 0, "periodsPaid should be 0");
     assertEq(
@@ -757,9 +757,9 @@ contract MortgageMathTest is Test {
 
     // Validate derived fields
     assertEq(
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       mortgagePosition.amountBorrowed,
-      "amountOutstanding should be the same as amountBorrowed"
+      "principalRemaining should be the same as amountBorrowed"
     );
     assertEq(mortgagePosition.periodsPaid(), 0, "periodsPaid should be 0");
     assertEq(
@@ -926,9 +926,9 @@ contract MortgageMathTest is Test {
 
     // Validate that dervied fields haven't changed
     assertEq(
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       mortgagePosition.amountBorrowed,
-      "amountOutstanding should be the same as amountBorrowed since no payments have been made"
+      "principalRemaining should be the same as amountBorrowed since no payments have been made"
     );
     assertEq(mortgagePosition.periodsPaid(), 0, "periodsPaid should be 0 since no payments have been made");
     assertEq(
@@ -1016,9 +1016,13 @@ contract MortgageMathTest is Test {
     (mortgagePosition,) = mortgagePosition.penaltyPay(penaltyAmount);
 
     // missedPayments should now be be timePassed / PERIOD_DURATION
+    uint8 expectedMissedPayments = uint8(timePassed / Constants.PERIOD_DURATION);
+    if (timePassed % Constants.PERIOD_DURATION == 0) {
+      expectedMissedPayments -= 1;
+    }
     assertEq(
       mortgagePosition.paymentsMissed,
-      uint8(timePassed / Constants.PERIOD_DURATION),
+      expectedMissedPayments,
       "paymentsMissed should be the same as timePassed / PERIOD_DURATION"
     );
 
@@ -1027,7 +1031,7 @@ contract MortgageMathTest is Test {
       mortgagePosition.periodPay(oldMortgagePosition.monthlyPayment() * oldMortgagePosition.totalPeriods, 0);
 
     // Validate that the mortgage is now fully paid off
-    assertEq(mortgagePosition.amountOutstanding(), 0, "amountOutstanding should be 0");
+    assertEq(mortgagePosition.principalRemaining(), 0, "principalRemaining should be 0");
   }
 
   /// forge-config: default.allow_internal_expect_revert = true
@@ -1165,7 +1169,7 @@ contract MortgageMathTest is Test {
     (mortgagePosition,) = mortgagePosition.refinance(refinanceRate, newInterestRate, newTotalPeriods);
 
     // Validate that the mortgage is fully paid off
-    assertEq(mortgagePosition.amountOutstanding(), 0, "amountOutstanding should be 0");
+    assertEq(mortgagePosition.principalRemaining(), 0, "principalRemaining should be 0");
     assertEq(mortgagePosition.monthlyPayment(), 0, "monthlyPayment should be 0");
     assertEq(mortgagePosition.termBalance, 0, "termBalance should be 0");
     assertEq(mortgagePosition.termPaid, mortgagePosition.termBalance, "termPaid should be the same as termBalance");
@@ -1203,7 +1207,7 @@ contract MortgageMathTest is Test {
     MortgagePosition memory oldMortgagePosition = mortgagePosition.copy();
 
     // Calculate the expected refinanceFee
-    uint256 expectedRefinanceFee = Math.mulDiv(oldMortgagePosition.amountOutstanding(), refinanceRate, Constants.BPS);
+    uint256 expectedRefinanceFee = Math.mulDiv(oldMortgagePosition.principalRemaining(), refinanceRate, Constants.BPS);
 
     // Call refinance on the mortgage position
     (mortgagePosition,) = mortgagePosition.refinance(refinanceRate, newInterestRate, newTotalPeriods);
@@ -1218,9 +1222,9 @@ contract MortgageMathTest is Test {
     assertEq(
       mortgagePosition.termBalance,
       MortgageMath.calculateTermBalance(
-        oldMortgagePosition.amountOutstanding(), newInterestRate, newTotalPeriods, newTotalPeriods
+        oldMortgagePosition.principalRemaining(), newInterestRate, newTotalPeriods, newTotalPeriods
       ),
-      "termBalance should be recalculated with the amountOutstanding"
+      "termBalance should be recalculated with the principalRemaining"
     );
     assertEq(
       mortgagePosition.amountPrior,
@@ -1263,9 +1267,9 @@ contract MortgageMathTest is Test {
 
     // Validate derived fields of are correct
     assertEq(
-      mortgagePosition.amountOutstanding(),
-      oldMortgagePosition.amountOutstanding(),
-      "amountOutstanding should be the same"
+      mortgagePosition.principalRemaining(),
+      oldMortgagePosition.principalRemaining(),
+      "principalRemaining should be the same"
     );
     assertEq(mortgagePosition.periodsPaid(), 0, "periodsPaid should be 0 now");
   }
@@ -1313,23 +1317,23 @@ contract MortgageMathTest is Test {
   /// forge-config: default.allow_internal_expect_revert = true
   function test_convertMortgage_revertsWhenOverConvertingAmount(
     MortgagePositionSeed memory mortgagePositionSeed,
-    uint256 amountConverting,
+    uint256 principalConverting,
     uint256 collateralConverting,
     uint256 latePaymentWindow
   ) public validLatePenaltyWindow(latePaymentWindow) {
     // Fuzz the mortgage position
     MortgagePosition memory mortgagePosition = _fuzzMortgagePositionWithSeed(mortgagePositionSeed);
 
-    // Make sure the amountConverting is greater than the amountOutstanding
-    amountConverting = bound(amountConverting, mortgagePosition.amountOutstanding() + 1, type(uint256).max);
+    // Make sure the principalConverting is greater than principalRemaining
+    principalConverting = bound(principalConverting, mortgagePosition.principalRemaining() + 1, type(uint256).max);
 
     // Attempt to over-convert the mortgage and expect a revert
     vm.expectRevert(
       abi.encodeWithSelector(
-        MortgageMath.CannotOverConvert.selector, mortgagePosition, amountConverting, collateralConverting
+        MortgageMath.CannotOverConvert.selector, mortgagePosition, principalConverting, collateralConverting
       )
     );
-    mortgagePosition = mortgagePosition.convert(amountConverting, collateralConverting);
+    mortgagePosition = mortgagePosition.convert(principalConverting, collateralConverting, latePaymentWindow);
   }
 
   /// forge-config: default.allow_internal_expect_revert = true
@@ -1351,40 +1355,38 @@ contract MortgageMathTest is Test {
         MortgageMath.CannotOverConvert.selector, mortgagePosition, amountConverting, collateralConverting
       )
     );
-    mortgagePosition = mortgagePosition.convert(amountConverting, collateralConverting);
+    mortgagePosition = mortgagePosition.convert(amountConverting, collateralConverting, latePaymentWindow);
   }
 
   function test_convertMortgage(
     MortgagePositionSeed memory mortgagePositionSeed,
-    uint256 amountConverting,
+    uint256 principalConverting,
     uint256 collateralConverting,
     uint256 latePaymentWindow
   ) public view validLatePenaltyWindow(latePaymentWindow) {
     // Fuzz the mortgage position
     MortgagePosition memory mortgagePosition = _fuzzMortgagePositionWithSeed(mortgagePositionSeed);
 
+    // Ensure monthlyPayment > 0
+    vm.assume(mortgagePosition.monthlyPayment() > 0);
+
     // Cache the old values
     MortgagePosition memory oldMortgagePosition = mortgagePosition.copy();
 
-    // Ensure the amountConverting is less than or equal to the amountOutstanding
-    amountConverting = bound(amountConverting, 0, mortgagePosition.amountOutstanding());
+    // Ensure the principalConverting is less than or equal to the principalRemaining
+    principalConverting = bound(principalConverting, 0, mortgagePosition.principalRemaining());
     // Ensure the collateralConverting is less than or equal to the collateralAmount
     collateralConverting = bound(collateralConverting, 0, mortgagePosition.collateralAmount);
+    // Calculate expected termConverted
+    uint256 expectedTermConverted = mortgagePosition.convertPrincipalToPayment(principalConverting);
 
     // Convert the mortgage
-    mortgagePosition = mortgagePosition.convert(amountConverting, collateralConverting);
+    mortgagePosition = mortgagePosition.convert(principalConverting, collateralConverting, latePaymentWindow);
 
     // Calculate expected termBalance, status, and periodsPaid
-    uint256 expectedTermBalance = MortgageMath.calculateTermBalance(
-      oldMortgagePosition.amountOutstanding() - amountConverting,
-      oldMortgagePosition.interestRate,
-      oldMortgagePosition.totalPeriods,
-      oldMortgagePosition.totalPeriods - oldMortgagePosition.periodsPaid()
-    );
+    uint256 expectedTermBalance = mortgagePosition.termBalance;
     MortgageStatus expectedStatus = MortgageStatus.ACTIVE;
-    uint8 expectedPeriodsPaid = oldMortgagePosition.amountOutstanding() == amountConverting
-      ? oldMortgagePosition.totalPeriods
-      : oldMortgagePosition.periodsPaid();
+    uint8 expectedPeriodsPaid = uint8(expectedTermConverted / mortgagePosition.monthlyPayment());
 
     // Validate the relevant fields have updated
     assertEq(
@@ -1395,7 +1397,9 @@ contract MortgageMathTest is Test {
     assertEq(mortgagePosition.termBalance, expectedTermBalance, "termBalance should equal expectedTermBalance"); // ToDo: Solve this
     assertEq(mortgagePosition.amountPrior, 0, "amountPrior should equal amountConverting");
     assertEq(mortgagePosition.termPaid, 0, "termPaid should be reset to 0"); // ToDo: Need to make a payment to better test this
-    assertEq(mortgagePosition.amountConverted, amountConverting, "amountConverted should equal amountConverting");
+    assertEq(mortgagePosition.termConverted, expectedTermConverted, "termConverted should equal amountConverting");
+    assertEq(mortgagePosition.amountConverted, 0, "amountConverted should equal 0 (no refinance yet)");
+    assertEq(mortgagePosition.collateralConverted, collateralConverting, "collateralConverted should equal collateralConverting");
     assertEq(uint8(mortgagePosition.status), uint8(expectedStatus), "status should equall expectedStatus");
 
     // Validate the rest of the fields are unchanged
@@ -1417,9 +1421,9 @@ contract MortgageMathTest is Test {
 
     // Validate that the derived fields have been updated
     assertEq(
-      mortgagePosition.amountOutstanding(),
-      oldMortgagePosition.amountOutstanding() - amountConverting,
-      "amountOutstanding should equal oldMortgagePosition.amountOutstanding() - amountConverting"
+      mortgagePosition.principalRemaining(),
+      oldMortgagePosition.principalRemaining() - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      "principalRemaining should equal oldMortgagePosition.principalRemaining() - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted)"
     );
     assertEq(mortgagePosition.periodsPaid(), expectedPeriodsPaid, "periodsPaid should equal expectedPeriodsPaid");
 
@@ -1451,9 +1455,9 @@ contract MortgageMathTest is Test {
     MortgagePosition memory mortgagePosition = _fuzzMortgagePositionWithSeed(mortgagePositionSeed);
 
     // Calculate the new average interest rate
-    uint256 left = mortgagePosition.interestRate * mortgagePosition.amountOutstanding();
+    uint256 left = mortgagePosition.interestRate * mortgagePosition.principalRemaining();
     uint256 right = newInterestRate * amountIn;
-    uint256 expected = (left + right) / (mortgagePosition.amountOutstanding() + amountIn);
+    uint256 expected = (left + right) / (mortgagePosition.principalRemaining() + amountIn);
 
     // Calculate the new average interest rate
     uint256 actual = MortgageMath.calculateNewAverageInterestRate(mortgagePosition, amountIn, newInterestRate);
@@ -1554,7 +1558,7 @@ contract MortgageMathTest is Test {
     uint16 expectedInterestRate =
       MortgageMath.calculateNewAverageInterestRate(oldMortgagePosition, amountIn, newInterestRate);
     uint256 expectedTermBalance = MortgageMath.calculateTermBalance(
-      oldMortgagePosition.amountOutstanding() + amountIn,
+      oldMortgagePosition.principalRemaining() + amountIn,
       expectedInterestRate,
       oldMortgagePosition.totalPeriods,
       oldMortgagePosition.totalPeriods
@@ -1619,9 +1623,9 @@ contract MortgageMathTest is Test {
 
     // Validate derived fields of are correct
     assertEq(
-      mortgagePosition.amountOutstanding(),
-      oldMortgagePosition.amountOutstanding() + amountIn,
-      "amountOutstanding should match oldMortgagePosition.amountOutstanding() + amountIn"
+      mortgagePosition.principalRemaining(),
+      oldMortgagePosition.principalRemaining() + amountIn,
+      "principalRemaining should match oldMortgagePosition.principalRemaining() + amountIn"
     );
     assertEq(
       mortgagePosition.monthlyPayment(),

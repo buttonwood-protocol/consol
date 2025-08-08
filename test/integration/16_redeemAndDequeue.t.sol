@@ -172,7 +172,7 @@ contract Integration_16_RedeemAndDequeueTest is IntegrationBaseTest {
 
     // Validate that the mortgage is entirely paid off
     mortgagePosition = loanManager.getMortgagePosition(mortgagePosition.tokenId);
-    assertEq(mortgagePosition.amountOutstanding(), 0, "amountOutstanding");
+    assertEq(mortgagePosition.principalRemaining(), 0, "principalRemaining");
 
     // Borrower redeems the mortgage
     vm.startPrank(borrower);

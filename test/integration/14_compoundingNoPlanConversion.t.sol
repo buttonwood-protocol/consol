@@ -181,9 +181,8 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
     conversionQueue.processWithdrawalRequests(1);
     vm.stopPrank();
 
-    // Estimate how much of the BTC should have been converted ($120k worth of BTC at a price of $150k)
-    // The lumpSumInterestPayment is higher because there is no payment plan
-    uint256 convertedBTC = Math.mulDiv(1e8, 120_000e18, 150_000e18);
+    // Estimate how much of the BTC should have been converted (termConverted / triggerPrice)
+    uint256 convertedBTC = Math.mulDiv(129070000000000000000008, 1e8, 150_000e18);
 
     // Validate the the lender received convertedBTC amount of BTC
     assertEq(btc.balanceOf(address(lender)), convertedBTC, "btc.Balance");
@@ -199,11 +198,12 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
     assertEq(mortgagePosition.interestRate, 969, "[2] interestRate");
     assertEq(mortgagePosition.dateOriginated, block.timestamp, "[2] dateOriginated");
     assertEq(mortgagePosition.termOriginated, block.timestamp, "[2] termOriginated");
-    assertEq(mortgagePosition.termBalance, 0, "[2] termBalance");
+    assertEq(mortgagePosition.termBalance, 129070000000000000000008, "[2] termBalance");
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "[2] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[2] amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "[2] termPaid");
-    assertEq(mortgagePosition.amountConverted, 100_000e18, "[2] amountConverted");
+    assertEq(mortgagePosition.termConverted, 129070000000000000000008, "[2] termConverted");
+    assertEq(mortgagePosition.amountConverted, 0, "[2] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[2] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[2] penaltyPaid");
     assertEq(mortgagePosition.paymentsMissed, 0, "[2] paymentsMissed");
@@ -211,6 +211,7 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "[2] totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, false, "[2] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[2] status");
+    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 100_000e18, "[2] convertPaymentToPrincipal(termConverted)");
 
     // Validate that the mortgagePosition has already been removed from the conversion queue
     assertEq(conversionQueue.mortgageHead(), 0, "mortgageHead");
@@ -233,11 +234,12 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
     assertEq(mortgagePosition.interestRate, 969, "[3] interestRate");
     assertEq(mortgagePosition.dateOriginated, block.timestamp, "[3] dateOriginated");
     assertEq(mortgagePosition.termOriginated, block.timestamp, "[3] termOriginated");
-    assertEq(mortgagePosition.termBalance, 0, "[3] termBalance");
+    assertEq(mortgagePosition.termBalance, 129070000000000000000008, "[3] termBalance");
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "[3] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[3] amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "[3] termPaid");
-    assertEq(mortgagePosition.amountConverted, 100_000e18, "[3] amountConverted");
+    assertEq(mortgagePosition.termConverted, 129070000000000000000008, "[3] termConverted");
+    assertEq(mortgagePosition.amountConverted, 0, "[3] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[3] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[3] penaltyPaid");
     assertEq(mortgagePosition.paymentsMissed, 0, "[3] paymentsMissed");
@@ -245,6 +247,7 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "[3] totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, false, "[3] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.REDEEMED), "[3] status");
+    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 100_000e18, "[3] convertPaymentToPrincipal(termConverted)");
 
     // Validate that the borrower has received the correct amount of BTC
     assertEq(btc.balanceOf(address(borrower)), 2e8 - convertedBTC, "btc.Balance");

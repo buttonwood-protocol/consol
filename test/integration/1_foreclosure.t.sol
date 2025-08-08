@@ -157,8 +157,8 @@ contract Integration_1_ForeclosureTest is IntegrationBaseTest {
     mortgagePosition = loanManager.getMortgagePosition(1);
     assertEq(mortgagePosition.paymentsMissed, 3, "paymentsMissed");
 
-    // Record amountOutstanding of the mortgage before foreclosure
-    uint256 amountOutstanding = mortgagePosition.amountOutstanding();
+    // Record principalRemaining of the mortgage before foreclosure
+    uint256 principalRemaining = mortgagePosition.principalRemaining();
 
     // Have random address forcelose the position
     vm.startPrank(rando);
@@ -169,14 +169,14 @@ contract Integration_1_ForeclosureTest is IntegrationBaseTest {
     mortgagePosition = loanManager.getMortgagePosition(1);
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.FORECLOSED), "status");
     assertEq(mortgagePosition.amountForfeited(), 0, "amountForfeited"); // Downpayment doesn't count as principal
-    assertEq(mortgagePosition.amountOutstanding(), 100_000e18, "amountOutstanding");
+    assertEq(mortgagePosition.principalRemaining(), 100_000e18, "principalRemaining");
 
     // Validate the mortgageNFT is burned
     vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 1));
     mortgageNFT.ownerOf(1);
 
-    // Validate that the totalSupply of the forfeitedAssetsPool is the amountOutstanding of the mortgage
-    assertEq(forfeitedAssetsPool.totalSupply(), amountOutstanding, "totalSupply");
+    // Validate that the totalSupply of the forfeitedAssetsPool is the principalRemaining of the mortgage
+    assertEq(forfeitedAssetsPool.totalSupply(), principalRemaining, "totalSupply");
 
     // Validate that the forfeitedAssetsPool has the correct balance of btc
     assertEq(btc.balanceOf(address(forfeitedAssetsPool)), 2e8, "forfeitedAssetsPool.balanceOf(btc)");

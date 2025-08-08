@@ -79,6 +79,7 @@ library MortgageMath {
       amountBorrowed: mortgagePosition.amountBorrowed,
       amountPrior: mortgagePosition.amountPrior,
       termPaid: mortgagePosition.termPaid,
+      termConverted: mortgagePosition.termConverted,
       amountConverted: mortgagePosition.amountConverted,
       penaltyAccrued: mortgagePosition.penaltyAccrued,
       penaltyPaid: mortgagePosition.penaltyPaid,
@@ -113,13 +114,60 @@ library MortgageMath {
   }
 
   /**
+   * @dev Calculates the delta in principal created from a payment
+   * @param mortgagePosition The mortgage position
+   * @param amount The amount of the payment
+   * @return The principal delta created
+   */
+  function calculatePrincipalDelta(MortgagePosition memory mortgagePosition, uint256 amount)
+    internal
+    pure
+    returns (uint256)
+  {
+    return mortgagePosition.convertPaymentToPrincipal(
+      mortgagePosition.termPaid + mortgagePosition.termConverted + amount
+    ) - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + mortgagePosition.termConverted);
+  }
+
+  /**
+   * @dev Converts a principal amount to the total debt being paid
+   * @param mortgagePosition The mortgage position
+   * @param amount The amount of principal
+   * @return The payment amount
+   */
+  function convertPrincipalToPayment(MortgagePosition memory mortgagePosition, uint256 amount)
+    internal
+    pure
+    returns (uint256)
+  {
+    if (mortgagePosition.termBalance == 0) {
+      return 0;
+    }
+    return Math.mulDiv(
+      amount,
+      mortgagePosition.termBalance,
+      mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.amountPrior,
+      Math.Rounding.Floor
+    );
+  }
+
+  /**
    * @dev Defined as the amount of principal that is left to be repaid (not including interest)
    * @param mortgagePosition The mortgage position
    * @return The amount of principal that is left to be repaid
    */
-  function amountOutstanding(MortgagePosition memory mortgagePosition) internal pure returns (uint256) {
+  function principalRemaining(MortgagePosition memory mortgagePosition) internal pure returns (uint256) {
     return mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.amountPrior
-      - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
+      - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + mortgagePosition.termConverted);
+  }
+
+  /**
+   * @dev Defined as the amount of debt left to be repaid in the current term (includes interest)
+   * @param mortgagePosition The mortgage position
+   * @return The amount of debt that is left to be repaid
+   */
+  function termRemaining(MortgagePosition memory mortgagePosition) internal pure returns (uint256) {
+    return mortgagePosition.termBalance - mortgagePosition.termConverted - mortgagePosition.termPaid;
   }
 
   /**
@@ -186,7 +234,7 @@ library MortgageMath {
     if (mortgagePosition.status != MortgageStatus.FORECLOSED) {
       return 0;
     }
-    return mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.amountOutstanding();
+    return mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.principalRemaining();
   }
 
   /**
@@ -227,6 +275,7 @@ library MortgageMath {
       amountBorrowed: amountBorrowed,
       amountPrior: 0,
       termPaid: 0,
+      termConverted: 0,
       amountConverted: 0,
       penaltyAccrued: 0,
       penaltyPaid: 0,
@@ -244,14 +293,14 @@ library MortgageMath {
    * @return The number of periods paid
    */
   function periodsPaid(MortgagePosition memory mortgagePosition) internal pure returns (uint8) {
-    // Calculate the number of periods paid based on the fraction of termPaid/termBalance
+    // Calculate the number of periods paid based on the fraction of (termPaid+termConverted)/termBalance
     if (mortgagePosition.termBalance == 0) {
       return mortgagePosition.totalPeriods;
     }
 
     return uint8(
       Math.mulDiv(
-        mortgagePosition.totalPeriods, mortgagePosition.termPaid, mortgagePosition.termBalance, Math.Rounding.Floor
+        mortgagePosition.totalPeriods, mortgagePosition.termPaid + mortgagePosition.termConverted, mortgagePosition.termBalance, Math.Rounding.Floor
       )
     );
   }
@@ -275,8 +324,8 @@ library MortgageMath {
       revert UnpaidPenalties(mortgagePosition);
     }
     // Ensure that the amount is not greater than the termBalance. Refund the surplus.
-    uint256 termRemaining = mortgagePosition.termBalance - mortgagePosition.termPaid;
-    if (termRemaining == 0 && amount > 0) {
+    uint256 _termRemaining = mortgagePosition.termRemaining();
+    if (_termRemaining == 0 && amount > 0) {
       revert CannotOverpay(mortgagePosition, amount);
     }
     // If the mortgage does not have a payment plan, the mortgage is paid in full at the end of the term
@@ -284,13 +333,13 @@ library MortgageMath {
       revert CannotPartialPrepay(mortgagePosition);
     }
     // Calculate the refund and subtract it from the amount
-    if (amount > termRemaining) {
-      refund = amount - termRemaining;
-      amount = termRemaining;
+    if (amount > _termRemaining) {
+      refund = amount - _termRemaining;
+      amount = _termRemaining;
     }
     // Calculate principal payment
-    principalPayment = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + amount)
-      - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
+    principalPayment = mortgagePosition.calculatePrincipalDelta(amount);
+
     // Update the termPaid
     mortgagePosition.termPaid += amount;
     // Make sure paymentsMissed is up to date
@@ -425,7 +474,7 @@ library MortgageMath {
       revert UnpaidPenalties(mortgagePosition);
     }
     // Revert if there are unpaid payments
-    if (mortgagePosition.termBalance > mortgagePosition.termPaid) {
+    if (mortgagePosition.termBalance > mortgagePosition.termPaid + mortgagePosition.termConverted) {
       revert UnpaidPayments(mortgagePosition);
     }
     // Update the status and return the updated mortgage position
@@ -457,8 +506,8 @@ library MortgageMath {
       revert MissedPayments(mortgagePosition);
     }
 
-    // Calculate the refinance fee as a percentage of the amountOutstanding
-    refinanceFee = Math.mulDiv(mortgagePosition.amountOutstanding(), refinanceRate, Constants.BPS, Math.Rounding.Floor);
+    // Calculate the refinance fee as a percentage of the principalRemaining
+    refinanceFee = Math.mulDiv(mortgagePosition.principalRemaining(), refinanceRate, Constants.BPS, Math.Rounding.Floor);
 
     // Add refinance fee into penaltyAccrued and penaltyPaid
     mortgagePosition.penaltyAccrued += refinanceFee;
@@ -469,11 +518,14 @@ library MortgageMath {
     mortgagePosition.totalPeriods = newTotalPeriods;
 
     uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
+    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + mortgagePosition.termConverted) - principalPaid;
     mortgagePosition.termBalance =
-      calculateTermBalance(mortgagePosition.amountOutstanding(), newInterestRate, newTotalPeriods, newTotalPeriods);
+      calculateTermBalance(mortgagePosition.principalRemaining(), newInterestRate, newTotalPeriods, newTotalPeriods);
     mortgagePosition.amountPrior += principalPaid;
     mortgagePosition.termOriginated = uint32(block.timestamp);
     mortgagePosition.termPaid = 0;
+    mortgagePosition.amountConverted += principalConverted;
+    mortgagePosition.termConverted = 0;
 
     // Return the updated mortgage position and the refinance fee
     return (mortgagePosition, refinanceFee);
@@ -502,53 +554,31 @@ library MortgageMath {
     return mortgagePosition;
   }
 
-  /**
+   /**
    * @dev Converts a mortgage position by reducing the principal and collateral
    * @param mortgagePosition The mortgage position
-   * @param amountConverting The amount of principal to convert
+   * @param principalConverting The amount of principal to convert
    * @param collateralConverting The amount of collateral to convert
+   * @param latePenaltyWindow The number of days after the due date that a payment is still considered on time
    * @return The updated mortgage position
    */
-  function convert(MortgagePosition memory mortgagePosition, uint256 amountConverting, uint256 collateralConverting)
-    internal
-    pure
-    returns (MortgagePosition memory)
-  {
-    // Revert if trying to convert more than the remaining amountOutstanding
-    if (
-      amountConverting > mortgagePosition.amountOutstanding()
-        || collateralConverting > mortgagePosition.collateralAmount
-    ) {
-      revert CannotOverConvert(mortgagePosition, amountConverting, collateralConverting);
+  function convert(MortgagePosition memory mortgagePosition, uint256 principalConverting, uint256 collateralConverting, uint256 latePenaltyWindow)
+  internal view returns (MortgagePosition memory) {
+    // Ensure that the amount is not greater than the principalRemaining and that the collateralConverting is not greater than the collateralAmount
+    if (principalConverting > mortgagePosition.principalRemaining() || collateralConverting > mortgagePosition.collateralAmount) {
+      revert CannotOverConvert(mortgagePosition, principalConverting, collateralConverting);
     }
 
-    // Record how much principal has already been paid
-    uint256 oldPrincipal = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
-
-    // Recalculate the termBalance
-    mortgagePosition.termBalance = calculateTermBalance(
-      mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.amountPrior
-        - amountConverting,
-      mortgagePosition.interestRate,
-      mortgagePosition.totalPeriods,
-      mortgagePosition.totalPeriods - mortgagePosition.periodsPaid()
-    );
-    // Update mortgagePosition details
+    // Update the termConverted, amountConverted, and collateralConverted fields
+    mortgagePosition.termConverted += mortgagePosition.convertPrincipalToPayment(principalConverting);
     mortgagePosition.collateralConverted += collateralConverting;
-    mortgagePosition.amountConverted += amountConverting;
 
-    // Update termPaid such that the principalPaid is the same as before
-    if (mortgagePosition.amountBorrowed > mortgagePosition.amountConverted + mortgagePosition.amountPrior) {
-      mortgagePosition.termPaid = Math.mulDiv(
-        oldPrincipal,
-        mortgagePosition.termBalance,
-        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.amountPrior,
-        Math.Rounding.Ceil
-      );
-    } else {
-      mortgagePosition.termPaid = mortgagePosition.termBalance;
-    }
-
+    // Make sure paymentsMissed is up to date
+    uint8 periodsSinceOrigination = mortgagePosition.periodsSinceTermOrigination(latePenaltyWindow);
+    uint8 _periodsPaid = mortgagePosition.periodsPaid();
+    mortgagePosition.paymentsMissed =
+      _periodsPaid > periodsSinceOrigination ? 0 : periodsSinceOrigination - _periodsPaid;
+    // Return the updated mortgage position
     return mortgagePosition;
   }
 
@@ -565,8 +595,8 @@ library MortgageMath {
     uint16 newInterestRate
   ) internal pure returns (uint16) {
     return uint16(
-      (mortgagePosition.interestRate * mortgagePosition.amountOutstanding() + newInterestRate * amountIn)
-        / (mortgagePosition.amountOutstanding() + amountIn)
+      (mortgagePosition.interestRate * mortgagePosition.principalRemaining() + newInterestRate * amountIn)
+        / (mortgagePosition.principalRemaining() + amountIn)
     );
   }
 
@@ -596,9 +626,11 @@ library MortgageMath {
     uint16 averageInterestRate = mortgagePosition.calculateNewAverageInterestRate(amountIn, newInterestRate);
     // Calculate how much of the principal has been paid off
     uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
+    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + mortgagePosition.termConverted) - principalPaid;
+
     // Calculate the new term balance
     mortgagePosition.termBalance = calculateTermBalance(
-      mortgagePosition.amountOutstanding() + amountIn,
+      mortgagePosition.principalRemaining() + amountIn,
       averageInterestRate,
       mortgagePosition.totalPeriods,
       mortgagePosition.totalPeriods
@@ -610,6 +642,8 @@ library MortgageMath {
     mortgagePosition.amountBorrowed += amountIn;
     mortgagePosition.amountPrior += principalPaid;
     mortgagePosition.termPaid = 0;
+    mortgagePosition.amountConverted += principalConverted;
+    mortgagePosition.termConverted = 0;    
 
     // Return the updated mortgage position
     return mortgagePosition;

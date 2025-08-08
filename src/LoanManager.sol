@@ -266,13 +266,15 @@ contract LoanManager is ILoanManager, ERC165, Context {
     IConsol(consol).safeTransferFrom(_msgSender(), address(this), amount - refund);
 
     // Withdraw the principalPayment amount of SubConsol from the Consol contract
-    IConsol(consol).withdraw(mortgagePositions[tokenId].subConsol, principalPayment);
+    if (principalPayment > 0) {
+      IConsol(consol).withdraw(mortgagePositions[tokenId].subConsol, principalPayment);
+    }
 
     // Burn the suprlus tokens accumulated in the loan manager (this represents interest getting redistributed to existing Consol holders)
     IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
 
     // Emit a period pay event
-    emit PeriodPay(tokenId, amount, mortgagePositions[tokenId].periodsPaid());
+    emit PeriodPay(tokenId, amount - refund, mortgagePositions[tokenId].periodsPaid());
   }
 
   /**
@@ -295,7 +297,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
 
     // Emit a penalty pay event
-    emit PenaltyPay(tokenId, amount);
+    emit PenaltyPay(tokenId, amount - refund);
   }
 
   /**
@@ -322,14 +324,14 @@ contract LoanManager is ILoanManager, ERC165, Context {
       ISubConsol(mortgagePosition.subConsol).withdrawCollateralAsync(
         _msgSender(),
         mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
-        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
+        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted)
       );
     } else {
       // Pull out the collateral from the subConsol that has been escrowed and send it to the caller
       ISubConsol(mortgagePosition.subConsol).withdrawCollateral(
         _msgSender(),
         mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
-        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
+        mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted)
       );
     }
 
@@ -366,7 +368,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
 
     // Emit a refinance mortgage event
     emit RefinanceMortgage(
-      tokenId, block.timestamp, refinanceFee, interestRate, mortgagePositions[tokenId].amountOutstanding()
+      tokenId, block.timestamp, refinanceFee, interestRate, mortgagePositions[tokenId].principalRemaining()
     );
   }
 
@@ -392,7 +394,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     IConsol(consol).flashSwap(
       IConsol(consol).forfeitedAssetsPool(),
       mortgagePosition.subConsol,
-      mortgagePosition.amountOutstanding(),
+      mortgagePosition.principalRemaining(),
       abi.encode(mortgagePosition)
     );
 
@@ -444,18 +446,26 @@ contract LoanManager is ILoanManager, ERC165, Context {
   /**
    * @inheritdoc ILoanManager
    */
-  function convertMortgage(uint256 tokenId, uint256 amount, uint256 collateralAmount)
-    external
-    override
-    mortgageExistsAndActive(tokenId)
-    imposePenaltyBefore(tokenId)
-    onlyGeneralManager
-  {
-    // Update the mortgage position to be converted
-    mortgagePositions[tokenId] = mortgagePositions[tokenId].convert(amount, collateralAmount);
+  function convertMortgage(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver) external override
+  mortgageExistsAndActive(tokenId) imposePenaltyBefore(tokenId) onlyGeneralManager {
+    mortgagePositions[tokenId] = mortgagePositions[tokenId].convert(amount, collateralAmount, Constants.LATE_PAYMENT_WINDOW);
 
-    // Emit a convert mortgage event
-    emit ConvertMortgage(tokenId, amount, collateralAmount);
+    // Cache the SubConsol
+    address subConsol = mortgagePositions[tokenId].subConsol;
+
+    // Pull Consol from the _msgSender()
+    IConsol(consol).safeTransferFrom(_msgSender(), address(this), amount);
+
+    // Withdraw amount of SubConsol from the Consol contract
+    if (amount > 0) {
+      IConsol(consol).withdraw(subConsol, amount);
+    }
+
+    // Withdraw the Collateral to the receiver and burn the SubConsol
+    ISubConsol(subConsol).withdrawCollateralAsync(receiver, collateralAmount, amount);
+
+    // Emit a period pay event
+    emit ConvertMortgage(tokenId, amount, collateralAmount, receiver);
   }
 
   /**

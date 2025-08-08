@@ -866,7 +866,7 @@ contract GeneralManager is
   /**
    * @inheritdoc IGeneralManager
    */
-  function convert(uint256 tokenId, uint256 amount, uint256 collateralAmount)
+  function convert(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver)
     external
     onlyRole(Roles.CONVERSION_ROLE)
     whenNotPaused
@@ -874,8 +874,11 @@ contract GeneralManager is
     // Fetch storage
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
+    // Approve loanManager for the amount of Consol
+    IConsol($._consol).approve(address(ILoanManager($._loanManager)), amount);
+
     // Convert the mortgage position
-    ILoanManager($._loanManager).convertMortgage(tokenId, amount, collateralAmount);
+    ILoanManager($._loanManager).convertMortgage(tokenId, amount, collateralAmount, receiver);
   }
 
   /**
