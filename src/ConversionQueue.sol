@@ -252,7 +252,7 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
 
       // Send the Consol to the GeneralManager
       IConsol(consol).transfer(generalManager, amountToUse);
-      
+
       // Update the values on the MortgagePosition
       IGeneralManager(generalManager).convert(mortgageTokenId, amountToUse, collateralToUse, request.account);
 

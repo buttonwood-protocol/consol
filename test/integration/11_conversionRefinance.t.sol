@@ -208,7 +208,11 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     uint256 expectedCollateralConverted = Math.mulDiv(63035000000000000000028, 1e8, 150_000e18);
 
     // Validate that the lender has $50k + lumpSumInterest (10%) in BTC [priced at the triggerPrice of $150k]
-    assertEq(btc.balanceOf(address(lender)), expectedCollateralConverted, "btc.balanceOf(lender) should equal expectedCollateralConverted");
+    assertEq(
+      btc.balanceOf(address(lender)),
+      expectedCollateralConverted,
+      "btc.balanceOf(lender) should equal expectedCollateralConverted"
+    );
 
     // ToDo: FIX THIS
     // Validate that the mortgage position is still in the conversion queue
@@ -240,7 +244,11 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "status");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 50_000e18, "convertPaymentToPrincipal(termConverted)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      50_000e18,
+      "convertPaymentToPrincipal(termConverted)"
+    );
 
     // Set the refinance rate to 10% ($5k fee)
     vm.startPrank(admin1);

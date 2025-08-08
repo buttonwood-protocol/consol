@@ -194,9 +194,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[2] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[2] status");
     assertEq(mortgagePosition.periodsPaid(), 8, "[2] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 22222222222222222222222, "[2] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      22222222222222222222222,
+      "[2] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 77777777777777777777778, "[2] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 22222222222222222222222, "[2] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 22222222222222222222222, "[2] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 77777777777777777777778, "[2] btcSubConsol.balanceOf(consol)");
 
     // Borrower misses 2 months + late payment widow
@@ -273,9 +279,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[3] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[3] status");
     assertEq(mortgagePosition.periodsPaid(), 10, "[3] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 27777777777777777777777, "[3] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      27777777777777777777777,
+      "[3] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 72222222222222222222223, "[3] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 27777777777777777777777, "[3] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 27777777777777777777777, "[3] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 72222222222222222222223, "[3] btcSubConsol.balanceOf(consol)");
 
     // Borrower makes the 6 periodic payments every 30 days again.
@@ -325,9 +337,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[4] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[4] status");
     assertEq(mortgagePosition.periodsPaid(), 16, "[4] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 44444444444444444444444, "[4] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      44444444444444444444444,
+      "[4] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 55555555555555555555556, "[4] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 44444444444444444444444, "[4] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 44444444444444444444444, "[4] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 55555555555555555555556, "[4] btcSubConsol.balanceOf(consol)");
 
     // Price of BTC increases to $150k
@@ -387,11 +405,17 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[5] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[5] status");
     assertEq(mortgagePosition.periodsPaid(), 25, "[5] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 44444444444444444444444, "[5] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      44444444444444444444444,
+      "[5] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 30555555555555555555556, "[5] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 44444444444444444444444, "[5] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 44444444444444444444444, "[5] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 30555555555555555555556, "[5] btcSubConsol.balanceOf(consol)");
-    
+
     // Borrower makes 8 periodic payments every 30 days again.
     vm.startPrank(borrower);
     for (uint256 i = 0; i < 8; i++) {
@@ -435,9 +459,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[6] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[6] status");
     assertEq(mortgagePosition.periodsPaid(), 33, "[6] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 66666666666666666666666, "[6] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      66666666666666666666666,
+      "[6] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 8333333333333333333334, "[6] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 66666666666666666666666, "[6] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 66666666666666666666666, "[6] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 8333333333333333333334, "[6] btcSubConsol.balanceOf(consol)");
 
     // Admin1 sets the refinance rate to 10% (1000 basis points)
@@ -464,7 +494,7 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
       usdx.approve(address(consol), usdxAmount);
       consol.deposit(address(usdx), usdxAmount);
       consol.approve(address(loanManager), refinanceFee);
-      loanManager.refinanceMortgage(mortgagePosition.tokenId, 36);    
+      loanManager.refinanceMortgage(mortgagePosition.tokenId, 36);
     }
     vm.stopPrank();
 
@@ -500,7 +530,9 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.periodsPaid(), 0, "[7] periodsPaid");
     assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 0, "[7] convertPaymentToPrincipal");
     assertEq(mortgagePosition.principalRemaining(), 8333333333333333333334, "[7] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 66666666666666666666666, "[7] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 66666666666666666666666, "[7] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 8333333333333333333334, "[7] btcSubConsol.balanceOf(consol)");
 
     // Borrower makes 18 periodic payments every 30 days again.
@@ -546,9 +578,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[8] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[8] status");
     assertEq(mortgagePosition.periodsPaid(), 18, "[8] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 4166666666666666666667, "[8] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      4166666666666666666667,
+      "[8] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 4166666666666666666667, "[8] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[8] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[8] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 4166666666666666666667, "[8] btcSubConsol.balanceOf(consol)");
 
     // Borrower misses 2 months + late payment widow
@@ -586,9 +624,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[9] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[9] status");
     assertEq(mortgagePosition.periodsPaid(), 18, "[9] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 4166666666666666666667, "[9] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      4166666666666666666667,
+      "[9] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 4166666666666666666667, "[9] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[9] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[9] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 4166666666666666666667, "[9] btcSubConsol.balanceOf(consol)");
 
     // Deal the conversion queue gas fee to the lender
@@ -635,16 +679,21 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[10] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[10] status");
     assertEq(mortgagePosition.periodsPaid(), 36, "[10] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 4166666666666666666667, "[10] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      4166666666666666666667,
+      "[10] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 0, "[10] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[10] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[10] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 0, "[10] btcSubConsol.balanceOf(consol)");
 
     // Checking that all principal/subConsol has been accounted for:
-    assertEq(mortgagePosition.amountConverted
-      + mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted)
-      + mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid)
-      + mortgagePosition.amountPrior, 
+    assertEq(
+      mortgagePosition.amountConverted + mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted)
+        + mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid) + mortgagePosition.amountPrior,
       mortgagePosition.amountBorrowed,
       "All principal/subConsol has been accounted for"
     );
@@ -652,7 +701,8 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     // Borrower pays off late fees
     vm.startPrank(borrower);
     {
-      uint256 usdxAmount = consol.convertUnderlying(address(usdx), mortgagePosition.penaltyAccrued - mortgagePosition.penaltyPaid);
+      uint256 usdxAmount =
+        consol.convertUnderlying(address(usdx), mortgagePosition.penaltyAccrued - mortgagePosition.penaltyPaid);
       uint256 usdtAmount = usdx.convertUnderlying(address(usdt), usdxAmount);
       MockERC20(address(usdt)).mint(address(borrower), usdtAmount);
       usdt.approve(address(usdx), usdtAmount);
@@ -691,9 +741,15 @@ contract Integration_10_ComplexHistoryTest is IntegrationBaseTest {
     assertEq(mortgagePosition.hasPaymentPlan, true, "[11] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[11] status");
     assertEq(mortgagePosition.periodsPaid(), 36, "[11] periodsPaid");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 4166666666666666666667, "[11] convertPaymentToPrincipal");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid),
+      4166666666666666666667,
+      "[11] convertPaymentToPrincipal"
+    );
     assertEq(mortgagePosition.principalRemaining(), 0, "[11] principalRemaining");
-    assertEq(btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[11] btcSubConsol.balanceOf(loanManager)");
+    assertEq(
+      btcSubConsol.balanceOf(address(loanManager)), 70833333333333333333333, "[11] btcSubConsol.balanceOf(loanManager)"
+    );
     assertEq(btcSubConsol.balanceOf(address(consol)), 0, "[11] btcSubConsol.balanceOf(consol)");
 
     // Borrower redeems the mortgage position

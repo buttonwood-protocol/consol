@@ -185,7 +185,7 @@ contract Integration_13_ConvertedWithPenaltiesTest is IntegrationBaseTest {
     // Price of BTC raises to $180k
     MockPyth(address(pyth)).setPrice(pythPriceIdBTC, 180_000e8, 4349253107, -8, block.timestamp);
 
-    // Double-checking the arbitrager doesn't already have some BTC 
+    // Double-checking the arbitrager doesn't already have some BTC
     assertEq(btc.balanceOf(address(arbitrager)), 0, "btc.balanceOf(arbitrager) starts off at 0");
 
     // Rando processes the conversion queue
@@ -204,7 +204,11 @@ contract Integration_13_ConvertedWithPenaltiesTest is IntegrationBaseTest {
     mortgagePosition = loanManager.getMortgagePosition(1);
     assertEq(mortgagePosition.collateralConverted, expectedCollateralConverted, "collateralConverted");
     assertEq(mortgagePosition.amountConverted, 0, "amountConverted (no refinance yet)");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 120_000e18, "convertPaymentToPrincipal(termConverted)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      120_000e18,
+      "convertPaymentToPrincipal(termConverted)"
+    );
     assertEq(mortgagePosition.termConverted, expectedTermConverted, "termConverted");
     assertEq(conversionQueue.mortgageHead(), 0, "mortgageHead");
     assertEq(conversionQueue.mortgageTail(), 0, "mortgageTail");

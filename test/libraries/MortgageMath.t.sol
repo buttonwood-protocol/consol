@@ -1399,7 +1399,11 @@ contract MortgageMathTest is Test {
     assertEq(mortgagePosition.termPaid, 0, "termPaid should be reset to 0"); // ToDo: Need to make a payment to better test this
     assertEq(mortgagePosition.termConverted, expectedTermConverted, "termConverted should equal amountConverting");
     assertEq(mortgagePosition.amountConverted, 0, "amountConverted should equal 0 (no refinance yet)");
-    assertEq(mortgagePosition.collateralConverted, collateralConverting, "collateralConverted should equal collateralConverting");
+    assertEq(
+      mortgagePosition.collateralConverted,
+      collateralConverting,
+      "collateralConverted should equal collateralConverting"
+    );
     assertEq(uint8(mortgagePosition.status), uint8(expectedStatus), "status should equall expectedStatus");
 
     // Validate the rest of the fields are unchanged
@@ -1422,7 +1426,8 @@ contract MortgageMathTest is Test {
     // Validate that the derived fields have been updated
     assertEq(
       mortgagePosition.principalRemaining(),
-      oldMortgagePosition.principalRemaining() - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      oldMortgagePosition.principalRemaining()
+        - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
       "principalRemaining should equal oldMortgagePosition.principalRemaining() - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted)"
     );
     assertEq(mortgagePosition.periodsPaid(), expectedPeriodsPaid, "periodsPaid should equal expectedPeriodsPaid");

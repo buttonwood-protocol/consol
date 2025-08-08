@@ -1291,8 +1291,16 @@ contract GeneralManagerTest is BaseTest {
 
     // Validate that the mortgagePosition has been updated
     assertEq(loanManager.getMortgagePosition(1).amountConverted, 0, "amountConverted should equal 0 (no refinance yet)");
-    assertEq(loanManager.getMortgagePosition(1).termConverted, expectedTermConverted, "termConverted should equal expectedTermConverted");
-    assertEq(loanManager.getMortgagePosition(1).collateralConverted,collateralConversionAmount,"collateralConverted should equal collateralConversionAmount");
+    assertEq(
+      loanManager.getMortgagePosition(1).termConverted,
+      expectedTermConverted,
+      "termConverted should equal expectedTermConverted"
+    );
+    assertEq(
+      loanManager.getMortgagePosition(1).collateralConverted,
+      collateralConversionAmount,
+      "collateralConverted should equal collateralConversionAmount"
+    );
 
     // Validate that the mortgage is still active at the end (no burning on conversion)
     assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");

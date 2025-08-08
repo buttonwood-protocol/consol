@@ -233,7 +233,11 @@ contract Integration_12_CompoundingHalfConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "[2] totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "[2] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[2] status");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 50_000e18, "[2] convertPaymentToPrincipal(termConverted)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      50_000e18,
+      "[2] convertPaymentToPrincipal(termConverted)"
+    );
 
     // Borrower redeems the mortgage
     vm.startPrank(borrower);

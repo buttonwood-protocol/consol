@@ -173,7 +173,13 @@ contract LoanManager is ILoanManager, ERC165, Context {
     }
   }
 
-  function _subConsolWithdrawCollateral(address subConsol, address receiver, uint256 collateralAmount, uint256 amount, bool async) internal {
+  function _subConsolWithdrawCollateral(
+    address subConsol,
+    address receiver,
+    uint256 collateralAmount,
+    uint256 amount,
+    bool async
+  ) internal {
     if (async) {
       ISubConsol(subConsol).withdrawCollateralAsync(receiver, collateralAmount, amount);
     } else {
@@ -341,7 +347,8 @@ contract LoanManager is ILoanManager, ERC165, Context {
       mortgagePosition.subConsol,
       _msgSender(),
       mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
-      mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      mortgagePosition.amountBorrowed - mortgagePosition.amountConverted
+        - mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
       async
     );
 
@@ -432,7 +439,13 @@ contract LoanManager is ILoanManager, ERC165, Context {
       uint256 amountForfeited = MortgageMath.amountForfeited(mortgagePosition);
 
       // Pull out the collateral from the subConsol that was just pulled (plus the forfeited amount)
-      _subConsolWithdrawCollateral(outputToken, address(this), mortgagePosition.collateralAmount - mortgagePosition.collateralConverted, amount + amountForfeited, false);
+      _subConsolWithdrawCollateral(
+        outputToken,
+        address(this),
+        mortgagePosition.collateralAmount - mortgagePosition.collateralConverted,
+        amount + amountForfeited,
+        false
+      );
 
       // Approving the collateral to the forfeited assets pool
       IERC20(mortgagePosition.collateral).approve(
@@ -452,9 +465,15 @@ contract LoanManager is ILoanManager, ERC165, Context {
   /**
    * @inheritdoc ILoanManager
    */
-  function convertMortgage(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver) external override
-  mortgageExistsAndActive(tokenId) imposePenaltyBefore(tokenId) onlyGeneralManager {
-    mortgagePositions[tokenId] = mortgagePositions[tokenId].convert(amount, collateralAmount, Constants.LATE_PAYMENT_WINDOW);
+  function convertMortgage(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver)
+    external
+    override
+    mortgageExistsAndActive(tokenId)
+    imposePenaltyBefore(tokenId)
+    onlyGeneralManager
+  {
+    mortgagePositions[tokenId] =
+      mortgagePositions[tokenId].convert(amount, collateralAmount, Constants.LATE_PAYMENT_WINDOW);
 
     // Cache the SubConsol
     address subConsol = mortgagePositions[tokenId].subConsol;

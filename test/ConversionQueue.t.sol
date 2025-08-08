@@ -286,22 +286,14 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     uint256 expectedCollateralToUse = Math.mulDiv(expectedTermConverted, 1e8, 150_000e18); // expectedTermConverted worth of btc when the price is $150k per btc
 
     // Validate fields on mortgagePosition
-    assertEq(
-      mortgagePosition1.termConverted,
-      expectedTermConverted,
-      "termConverted should equal expectedTermConverted"
-    );
+    assertEq(mortgagePosition1.termConverted, expectedTermConverted, "termConverted should equal expectedTermConverted");
     assertApproxEqAbs(
       mortgagePosition1.convertPaymentToPrincipal(mortgagePosition1.termConverted),
       10_000e18,
       1,
       "convertPaymentToPrincipal(termConverted) should equal 10_000e18"
     );
-    assertEq(
-      mortgagePosition1.amountConverted,
-      0,
-      "amountConverted should equal 0 (no refinance yet)"
-    );
+    assertEq(mortgagePosition1.amountConverted, 0, "amountConverted should equal 0 (no refinance yet)");
     assertEq(
       mortgagePosition1.collateralConverted,
       expectedCollateralToUse,
@@ -348,8 +340,16 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     MortgagePosition memory mortgagePosition2 = loanManager.getMortgagePosition(2);
 
     // Validate the termBalance of mortgagePosition1 and mortgagePosition2
-    assertEq(mortgagePosition1.termBalance, 127000000000000000000008, "mortgagePosition1.termBalance == 127000000000000000000008");
-    assertEq(mortgagePosition2.termBalance, 254000000000000000000016, "mortgagePosition2.termBalance == 254000000000000000000016");
+    assertEq(
+      mortgagePosition1.termBalance,
+      127000000000000000000008,
+      "mortgagePosition1.termBalance == 127000000000000000000008"
+    );
+    assertEq(
+      mortgagePosition2.termBalance,
+      254000000000000000000016,
+      "mortgagePosition2.termBalance == 254000000000000000000016"
+    );
 
     // Mortgage1: Calculate the expected amountToUse, collateralToUse, and subConsolToUse
     uint256 expectedTermConverted1 = mortgagePosition1.termBalance;
@@ -369,19 +369,43 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     mortgagePosition1 = loanManager.getMortgagePosition(1);
 
     // Validate the values of mortgagePosition1
-    assertEq(mortgagePosition1.amountConverted, 0, "mortgagePosition1.amountConverted should equal 0 (no refinance yet)");
-    assertEq(mortgagePosition1.termConverted, expectedTermConverted1, "mortgagePosition1.termConverted should equal expectedTermConverted1");
-    assertEq(mortgagePosition1.collateralConverted, expectedCollateralToUse1, "mortgagePosition1.collateralConverted should equal expectedCollateralToUse1");
-    assertEq(uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "mortgagePosition1 should be in the active status");
+    assertEq(
+      mortgagePosition1.amountConverted, 0, "mortgagePosition1.amountConverted should equal 0 (no refinance yet)"
+    );
+    assertEq(
+      mortgagePosition1.termConverted,
+      expectedTermConverted1,
+      "mortgagePosition1.termConverted should equal expectedTermConverted1"
+    );
+    assertEq(
+      mortgagePosition1.collateralConverted,
+      expectedCollateralToUse1,
+      "mortgagePosition1.collateralConverted should equal expectedCollateralToUse1"
+    );
+    assertEq(
+      uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "mortgagePosition1 should be in the active status"
+    );
 
     // Update mortgagePosition2
     mortgagePosition2 = loanManager.getMortgagePosition(2);
 
     // // Validate the values of mortgagePosition2
-    assertEq(mortgagePosition2.amountConverted, 0, "mortgagePosition2.amountConverted should equal 0 (no refinance yet)");
-    assertEq(mortgagePosition2.termConverted, expectedTermConverted2, "mortgagePosition2.termConverted should equal expectedTermConverted2");
-    assertEq(mortgagePosition2.collateralConverted, expectedCollateralToUse2, "mortgagePosition2.collateralConverted should equal expectedCollateralToUse2");
-    assertEq(uint8(mortgagePosition2.status), uint8(MortgageStatus.ACTIVE), "mortgagePosition2 should be in the active status");
+    assertEq(
+      mortgagePosition2.amountConverted, 0, "mortgagePosition2.amountConverted should equal 0 (no refinance yet)"
+    );
+    assertEq(
+      mortgagePosition2.termConverted,
+      expectedTermConverted2,
+      "mortgagePosition2.termConverted should equal expectedTermConverted2"
+    );
+    assertEq(
+      mortgagePosition2.collateralConverted,
+      expectedCollateralToUse2,
+      "mortgagePosition2.collateralConverted should equal expectedCollateralToUse2"
+    );
+    assertEq(
+      uint8(mortgagePosition2.status), uint8(MortgageStatus.ACTIVE), "mortgagePosition2 should be in the active status"
+    );
 
     // Validate lender3's new balances
     assertEq(consol.balanceOf(lender3), 56_000e18, "Lender3 should have 56k consols left (306k - 250k)");

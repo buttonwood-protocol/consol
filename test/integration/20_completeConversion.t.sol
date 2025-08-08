@@ -218,7 +218,11 @@ contract Integration_20_CompleteConversionTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "status");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 100_000e18, "convertPaymentToPrincipal(termConverted)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      100_000e18,
+      "convertPaymentToPrincipal(termConverted)"
+    );
 
     // Validate that the mortgagePosition has already been removed from the conversion queue
     assertEq(conversionQueue.mortgageHead(), 0, "mortgageHead");

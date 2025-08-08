@@ -188,7 +188,7 @@ contract Integration_15_HalfConvertedTest is IntegrationBaseTest {
     conversionQueue.processWithdrawalRequests(1);
     vm.stopPrank();
 
-    // Estimate how much of the BTC should have been converted 
+    // Estimate how much of the BTC should have been converted
     uint256 convertedBTC = Math.mulDiv(63035000000000000000028, 1e8, 150_000e18);
 
     // Validate the the lender received convertedBTC amount of BTC
@@ -218,7 +218,11 @@ contract Integration_15_HalfConvertedTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "status");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 50_000e18, "convertPaymentToPrincipal(termConverted)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      50_000e18,
+      "convertPaymentToPrincipal(termConverted)"
+    );
 
     // Validate that the purchase price is still $100k
     assertEq(mortgagePosition.purchasePrice(), 100_000e18, "purchasePrice");

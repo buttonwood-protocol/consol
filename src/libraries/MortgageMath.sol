@@ -300,7 +300,10 @@ library MortgageMath {
 
     return uint8(
       Math.mulDiv(
-        mortgagePosition.totalPeriods, mortgagePosition.termPaid + mortgagePosition.termConverted, mortgagePosition.termBalance, Math.Rounding.Floor
+        mortgagePosition.totalPeriods,
+        mortgagePosition.termPaid + mortgagePosition.termConverted,
+        mortgagePosition.termBalance,
+        Math.Rounding.Floor
       )
     );
   }
@@ -518,7 +521,9 @@ library MortgageMath {
     mortgagePosition.totalPeriods = newTotalPeriods;
 
     uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
-    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + mortgagePosition.termConverted) - principalPaid;
+    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(
+      mortgagePosition.termPaid + mortgagePosition.termConverted
+    ) - principalPaid;
     mortgagePosition.termBalance =
       calculateTermBalance(mortgagePosition.principalRemaining(), newInterestRate, newTotalPeriods, newTotalPeriods);
     mortgagePosition.amountPrior += principalPaid;
@@ -554,7 +559,7 @@ library MortgageMath {
     return mortgagePosition;
   }
 
-   /**
+  /**
    * @dev Converts a mortgage position by reducing the principal and collateral
    * @param mortgagePosition The mortgage position
    * @param principalConverting The amount of principal to convert
@@ -562,10 +567,17 @@ library MortgageMath {
    * @param latePenaltyWindow The number of days after the due date that a payment is still considered on time
    * @return The updated mortgage position
    */
-  function convert(MortgagePosition memory mortgagePosition, uint256 principalConverting, uint256 collateralConverting, uint256 latePenaltyWindow)
-  internal view returns (MortgagePosition memory) {
+  function convert(
+    MortgagePosition memory mortgagePosition,
+    uint256 principalConverting,
+    uint256 collateralConverting,
+    uint256 latePenaltyWindow
+  ) internal view returns (MortgagePosition memory) {
     // Ensure that the amount is not greater than the principalRemaining and that the collateralConverting is not greater than the collateralAmount
-    if (principalConverting > mortgagePosition.principalRemaining() || collateralConverting > mortgagePosition.collateralAmount) {
+    if (
+      principalConverting > mortgagePosition.principalRemaining()
+        || collateralConverting > mortgagePosition.collateralAmount
+    ) {
       revert CannotOverConvert(mortgagePosition, principalConverting, collateralConverting);
     }
 
@@ -626,7 +638,9 @@ library MortgageMath {
     uint16 averageInterestRate = mortgagePosition.calculateNewAverageInterestRate(amountIn, newInterestRate);
     // Calculate how much of the principal has been paid off
     uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
-    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid + mortgagePosition.termConverted) - principalPaid;
+    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(
+      mortgagePosition.termPaid + mortgagePosition.termConverted
+    ) - principalPaid;
 
     // Calculate the new term balance
     mortgagePosition.termBalance = calculateTermBalance(
@@ -643,7 +657,7 @@ library MortgageMath {
     mortgagePosition.amountPrior += principalPaid;
     mortgagePosition.termPaid = 0;
     mortgagePosition.amountConverted += principalConverted;
-    mortgagePosition.termConverted = 0;    
+    mortgagePosition.termConverted = 0;
 
     // Return the updated mortgage position
     return mortgagePosition;

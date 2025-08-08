@@ -337,7 +337,11 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "[3] totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, false, "[3] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[3] status");
-    assertEq(mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted), 100_000e18, "[3] convertPaymentToPrincipal(termConverted)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      100_000e18,
+      "[3] convertPaymentToPrincipal(termConverted)"
+    );
 
     // Validate that the mortgagePosition is still in the conversion queue
     assertEq(conversionQueue.mortgageHead(), mortgagePosition.tokenId, "[3] mortgageHead");
