@@ -201,7 +201,7 @@ contract Integration_24_ConversionSmallAmount is IntegrationBaseTest {
 
     // Validate that almost all of the mortgage has been prepaid (1 wei of principal is left to be paid)
     mortgagePosition = loanManager.getMortgagePosition(1);
-    assertEq(mortgagePosition.amountOutstanding(), 1, "amountOutstanding");
+    assertEq(mortgagePosition.principalRemaining(), 1, "principalRemaining");
 
     // Have the holder enter the conversionQueue with 1 Consol
     {

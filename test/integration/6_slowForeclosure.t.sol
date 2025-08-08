@@ -145,8 +145,8 @@ contract Integration_6_SlowForeclosureTest is IntegrationBaseTest {
     mortgagePosition = loanManager.getMortgagePosition(1);
     assertEq(mortgagePosition.paymentsMissed, 60, "paymentsMissed");
 
-    // Record amountOutstanding of the mortgage before foreclosure
-    uint256 amountOutstanding = mortgagePosition.amountOutstanding();
+    // Record principalRemaining of the mortgage before foreclosure
+    uint256 principalRemaining = mortgagePosition.principalRemaining();
 
     // Have random address forcelose the position
     vm.startPrank(rando);
@@ -162,8 +162,8 @@ contract Integration_6_SlowForeclosureTest is IntegrationBaseTest {
     vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 1));
     mortgageNFT.ownerOf(1);
 
-    // Validate that the totalSupply of the forfeitedAssetsPool is the amountOutstanding of the mortgage
-    assertEq(forfeitedAssetsPool.totalSupply(), amountOutstanding, "totalSupply");
+    // Validate that the totalSupply of the forfeitedAssetsPool is the principalRemaining of the mortgage
+    assertEq(forfeitedAssetsPool.totalSupply(), principalRemaining, "totalSupply");
 
     // Validate that the forfeitedAssetsPool has the correct balance of btc
     assertEq(btc.balanceOf(address(forfeitedAssetsPool)), 2e8, "forfeitedAssetsPool.balanceOf(btc)");

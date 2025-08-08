@@ -34,9 +34,12 @@ import {Roles} from "../src/libraries/Roles.sol";
 import {PurchaseOrder} from "../src/types/orders/PurchaseOrder.sol";
 import {OriginationParameters} from "../src/types/orders/OriginationParameters.sol";
 import {Constants} from "../src/libraries/Constants.sol";
+import {MortgageMath} from "../src/libraries/MortgageMath.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract GeneralManagerTest is BaseTest {
+  using MortgageMath for MortgagePosition;
+
   function setUp() public override {
     super.setUp();
   }
@@ -1166,7 +1169,8 @@ contract GeneralManagerTest is BaseTest {
     address caller,
     uint256 tokenId,
     uint256 amount,
-    uint256 collateralAmount
+    uint256 collateralAmount,
+    address receiver
   ) public {
     // Ensure the caller doesn't have the conversion role
     vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.CONVERSION_ROLE, caller));
@@ -1176,20 +1180,24 @@ contract GeneralManagerTest is BaseTest {
     vm.expectRevert(
       abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.CONVERSION_ROLE)
     );
-    generalManager.convert(tokenId, amount, collateralAmount);
+    generalManager.convert(tokenId, amount, collateralAmount, receiver);
     vm.stopPrank();
   }
 
   function test_convert_compoundingWithPaymentPlan(
     address caller,
     CreationRequest memory createRequestSeed,
-    uint256 conversionAmount,
-    uint256 collateralConversionAmount
+    uint256 principalConverting,
+    uint256 collateralConversionAmount,
+    address receiver
   ) public {
     // Have admin grant the conversion role to the caller
     vm.startPrank(admin);
     IAccessControl(address(generalManager)).grantRole(Roles.CONVERSION_ROLE, caller);
     vm.stopPrank();
+
+    // Ensuring receiver is not the 0 address
+    vm.assume(receiver != address(0));
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
@@ -1211,9 +1219,6 @@ contract GeneralManagerTest is BaseTest {
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum borrow amount
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
-
-    // Make sure the conversion amount is less than or equal to the amountBorrowed
-    conversionAmount = bound(conversionAmount, 1, amountBorrowed);
 
     // Have the lender deposit amountBorrowed of USDX into the origination pool
     _mintUsdx(lender, amountBorrowed);
@@ -1257,17 +1262,45 @@ contract GeneralManagerTest is BaseTest {
     assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
     assertEq(mortgageNFT.ownerOf(1), borrower, "Borrower should be the owner of the mortgage NFT");
 
+    // Fetch the mortgagePosition
+    MortgagePosition memory mortgagePosition = loanManager.getMortgagePosition(1);
+
+    // Make sure the conversion amount is less than or equal to the principalRemaining
+    principalConverting = bound(principalConverting, 1, mortgagePosition.principalRemaining());
+
+    // Deal amountConverting amount of consol to the generalManager to emulate having it sent by the ConversionQueue
+    {
+      uint256 usdxAmount = consol.convertUnderlying(address(usdx), principalConverting);
+      uint256 usdtAmount = usdx.convertUnderlying(address(usdt), usdxAmount);
+      ERC20Mock(address(usdt)).mint(address(generalManager), usdtAmount);
+      usdt.approve(address(generalManager), usdtAmount);
+      vm.startPrank(address(generalManager));
+      usdt.approve(address(usdx), usdtAmount);
+      usdx.deposit(address(usdt), usdtAmount);
+      usdx.approve(address(consol), usdxAmount);
+      consol.deposit(address(usdx), usdxAmount);
+      vm.stopPrank();
+    }
+
+    // Calculate expectedTermConverted
+    uint256 expectedTermConverted = mortgagePosition.convertPrincipalToPayment(principalConverting);
+
     // Have the caller convert the mortgage
     vm.startPrank(caller);
-    generalManager.convert(1, conversionAmount, collateralConversionAmount);
+    generalManager.convert(1, principalConverting, collateralConversionAmount, receiver);
     vm.stopPrank();
 
     // Validate that the mortgagePosition has been updated
-    assertEq(loanManager.getMortgagePosition(1).amountConverted, conversionAmount, "Amount converted should be updated");
+    assertEq(loanManager.getMortgagePosition(1).amountConverted, 0, "amountConverted should equal 0 (no refinance yet)");
+    assertEq(
+      loanManager.getMortgagePosition(1).termConverted,
+      expectedTermConverted,
+      "termConverted should equal expectedTermConverted"
+    );
     assertEq(
       loanManager.getMortgagePosition(1).collateralConverted,
       collateralConversionAmount,
-      "Collateral converted should be updated"
+      "collateralConverted should equal collateralConversionAmount"
     );
 
     // Validate that the mortgage is still active at the end (no burning on conversion)

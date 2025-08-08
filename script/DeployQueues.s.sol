@@ -54,19 +54,11 @@ contract DeployQueues is DeployGeneralManager {
   function deployConversionQueues() public {
     uint16 priceMultiplierBps = uint16(vm.envUint("CONVERSION_PRICE_MULTIPLIER_BPS"));
     for (uint256 i = 0; i < collateralTokens.length; i++) {
-      // Fetch lump sum interest rate for the ith collateral
-      uint16 lumpSumInterestRateBps =
-        uint16(vm.envUint(string.concat("CONVERSION_LUMP_SUM_INTEREST_RATE_BPS_", vm.toString(i))));
-      uint16 paymentPlanLumpSumInterestRateBps =
-        uint16(vm.envUint(string.concat("CONVERSION_PAYMENT_PLAN_LUMP_SUM_INTEREST_RATE_BPS_", vm.toString(i))));
-
       // Create conversionQueue for the ith collateral
       ConversionQueue conversionQueue = new ConversionQueue(
         address(collateralTokens[i]),
         collateralTokens[i].decimals(),
         address(subConsols[i]),
-        lumpSumInterestRateBps,
-        paymentPlanLumpSumInterestRateBps,
         priceMultiplierBps,
         address(consol),
         address(generalManager),

@@ -173,8 +173,8 @@ contract Integration_2_PayAndRefinanceTest is IntegrationBaseTest {
     MockPyth(address(pyth)).setPrice(pythPriceId5YrInterestRate, 300000000, 384706, -8, block.timestamp);
     vm.stopPrank();
 
-    // Calculate the refinance fee based on the refinance rate and amountOutstanding
-    uint256 refinanceFee = mortgagePosition.amountOutstanding() / 10;
+    // Calculate the refinance fee based on the refinance rate and principalRemaining
+    uint256 refinanceFee = mortgagePosition.principalRemaining() / 10;
 
     // Borrow approves sufficient Consol to pay the refinance fee
     uint256 usdxAmount = consol.convertUnderlying(address(usdx), refinanceFee);

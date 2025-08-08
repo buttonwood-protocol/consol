@@ -126,6 +126,7 @@ contract Integration_12_CompoundingHalfConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "[1] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[1] amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "[1] termPaid");
+    assertEq(mortgagePosition.termConverted, 0, "[1] termConverted");
     assertEq(mortgagePosition.amountConverted, 0, "[1] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[1] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[1] penaltyPaid");
@@ -176,9 +177,9 @@ contract Integration_12_CompoundingHalfConvertTest is IntegrationBaseTest {
     assertEq(
       mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid), 50_000e18, "convertPaymentToPrincipal"
     );
-    assertEq(mortgagePosition.amountOutstanding(), 50_000e18, "amountOutstanding");
+    assertEq(mortgagePosition.principalRemaining(), 50_000e18, "principalRemaining");
 
-    // Price of BTC increases to $150k
+    // Price of BTC increases to $200k
     MockPyth(address(pyth)).setPrice(pythPriceIdBTC, 150_000e8, 4349253107, -8, block.timestamp);
 
     // Lender redeems all of their balance from the origination pool
@@ -205,22 +206,26 @@ contract Integration_12_CompoundingHalfConvertTest is IntegrationBaseTest {
     assertEq(conversionQueue.mortgageTail(), 0, "mortgageTail");
     assertEq(conversionQueue.mortgageSize(), 0, "mortgageSize");
 
+    // Calculate expected collateralConverted (termConverted / triggerPrice)
+    uint256 expectedCollateralConverted = Math.mulDiv(63035000000000000000010, 1e8, 150_000e18);
+
     // Confirm that the mortgage position is converted
     mortgagePosition = loanManager.getMortgagePosition(1);
     assertEq(mortgagePosition.tokenId, 1, "[2] tokenId");
     assertEq(mortgagePosition.collateral, address(btc), "[2] collateral");
     assertEq(mortgagePosition.collateralDecimals, 8, "[2] collateralDecimals");
     assertEq(mortgagePosition.collateralAmount, 2e8, "[2] collateralAmount");
-    assertEq(mortgagePosition.collateralConverted, 36666666, "[2] collateralConverted");
+    assertEq(mortgagePosition.collateralConverted, expectedCollateralConverted, "[2] collateralConverted");
     assertEq(mortgagePosition.subConsol, address(btcSubConsol), "[2] subConsol");
     assertEq(mortgagePosition.interestRate, 869, "[2] interestRate");
     assertEq(mortgagePosition.dateOriginated, originalDateOriginated, "[2] dateOriginated");
     assertEq(mortgagePosition.termOriginated, originalDateOriginated, "[2] termOriginated");
-    assertEq(mortgagePosition.termBalance, 63035000000000000000010, "[2] termBalance");
+    assertEq(mortgagePosition.termBalance, 126070000000000000000020, "[2] termBalance");
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "[2] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[2] amountPrior");
     assertEq(mortgagePosition.termPaid, 63035000000000000000010, "[2] termPaid"); // Fully paid off
-    assertEq(mortgagePosition.amountConverted, 50_000e18, "[2] amountConverted");
+    assertEq(mortgagePosition.termConverted, 63035000000000000000010, "[2] termConverted");
+    assertEq(mortgagePosition.amountConverted, 0, "[2] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[2] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[2] penaltyPaid");
     assertEq(mortgagePosition.paymentsMissed, 0, "[2] paymentsMissed");
@@ -228,6 +233,11 @@ contract Integration_12_CompoundingHalfConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "[2] totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "[2] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[2] status");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      50_000e18,
+      "[2] convertPaymentToPrincipal(termConverted)"
+    );
 
     // Borrower redeems the mortgage
     vm.startPrank(borrower);

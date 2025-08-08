@@ -66,10 +66,10 @@ interface ILoanManagerEvents {
    * @param timestamp The timestamp of the refinance
    * @param refinanceFee The refinance fee
    * @param interestRate The interest rate
-   * @param amountOutstanding The amount outstanding
+   * @param principalRemaining The principal remaining
    */
   event RefinanceMortgage(
-    uint256 indexed tokenId, uint256 timestamp, uint256 refinanceFee, uint16 interestRate, uint256 amountOutstanding
+    uint256 indexed tokenId, uint256 timestamp, uint256 refinanceFee, uint16 interestRate, uint256 principalRemaining
   );
 
   /**
@@ -83,8 +83,9 @@ interface ILoanManagerEvents {
    * @param tokenId The numerical index of the mortgageNFT
    * @param amount The amount of the mortgage that is being converted
    * @param collateralAmount The amount of the collateral that is being converted
+   * @param receiver The address receiving the converted collateral
    */
-  event ConvertMortgage(uint256 indexed tokenId, uint256 amount, uint256 collateralAmount);
+  event ConvertMortgage(uint256 indexed tokenId, uint256 amount, uint256 collateralAmount, address receiver);
 
   /**
    * @notice Emitted when the balance sheet of a mortgage position is expanded

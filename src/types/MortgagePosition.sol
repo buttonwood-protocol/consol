@@ -18,7 +18,8 @@ import {MortgageStatus} from "./enums/MortgageStatus.sol";
  * @param amountBorrowed The amount borrowed by the borrower
  * @param amountPrior The cumulative amount of principal paid off in prior terms
  * @param termPaid The amount paid by the borrower for the current term
- * @param amountConverted The amount of the mortgage that has been forgiven as a result of a conversion
+ * @param termConverted The amount of the current term paid via conversion in the current term.
+ * @param amountConverted The amount of the principal that has been forgiven as a result of a conversion in previous terms. Excludes the current term.
  * @param penaltyAccrued Sum of penalties accrued. This number is never decremented.
  * @param penaltyPaid The penalty paid by the borrower. Incremented with every call to penaltyPay()
  * @param paymentsMissed The number of payments missed by the borrower. Reset to 0 when penaltyPaid == penaltyAccrued
@@ -41,7 +42,8 @@ struct MortgagePosition {
   uint256 amountBorrowed;
   uint256 amountPrior; // This one is cumulative amounts of principal paid off in prior terms
   uint256 termPaid; // This one is only for the current term
-  uint256 amountConverted;
+  uint256 termConverted; // This is only for the current term
+  uint256 amountConverted; // This one is cumulative amounts of principal converted in previous terms
   uint256 penaltyAccrued;
   uint256 penaltyPaid;
   uint8 paymentsMissed;

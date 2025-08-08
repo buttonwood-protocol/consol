@@ -132,6 +132,7 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "termPaid");
+    assertEq(mortgagePosition.termConverted, 0, "termConverted");
     assertEq(mortgagePosition.amountConverted, 0, "amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "penaltyPaid");
@@ -184,9 +185,9 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
       // Expected
     }
 
-    // Race the price of BTC to $150k by writing to the pyth contract
+    // Race the price of BTC to $155k by writing to the pyth contract
     vm.startPrank(borrower);
-    MockPyth(address(pyth)).setPrice(pythPriceIdBTC, 150_000e8, 4349253107, -8, block.timestamp);
+    MockPyth(address(pyth)).setPrice(pythPriceIdBTC, 155_000e8, 4349253107, -8, block.timestamp);
     vm.stopPrank();
 
     // Have rando process the withdrawal request
@@ -203,8 +204,15 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     // Validate that the lender's withdrawal request is no longer in the conversion queue
     assertEq(conversionQueue.withdrawalQueueLength(), 0, "withdrawalQueueLength");
 
-    // Validate that the lender has $50k + lumpSumInterest (10%) in BTC
-    assertEq(btc.balanceOf(address(lender)), Math.mulDiv(1e8, 11000, 3 * 1e4), "btc.balanceOf(lender)");
+    // Calculate expected collateralConverted (termConverted / triggerPrice)
+    uint256 expectedCollateralConverted = Math.mulDiv(63035000000000000000028, 1e8, 150_000e18);
+
+    // Validate that the lender has $50k + lumpSumInterest (10%) in BTC [priced at the triggerPrice of $150k]
+    assertEq(
+      btc.balanceOf(address(lender)),
+      expectedCollateralConverted,
+      "btc.balanceOf(lender) should equal expectedCollateralConverted"
+    );
 
     // ToDo: FIX THIS
     // Validate that the mortgage position is still in the conversion queue
@@ -218,16 +226,17 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     assertEq(mortgagePosition.collateral, address(btc), "collateral");
     assertEq(mortgagePosition.collateralDecimals, 8, "collateralDecimals");
     assertEq(mortgagePosition.collateralAmount, 2e8, "collateralAmount");
-    assertEq(mortgagePosition.collateralConverted, Math.mulDiv(1e8, 11000, 3 * 1e4), "collateralConverted");
+    assertEq(mortgagePosition.collateralConverted, expectedCollateralConverted, "collateralConverted");
     assertEq(mortgagePosition.subConsol, address(btcSubConsol), "subConsol");
     assertEq(mortgagePosition.interestRate, 869, "interestRate");
     assertEq(mortgagePosition.dateOriginated, block.timestamp, "dateOriginated");
     assertEq(mortgagePosition.termOriginated, block.timestamp, "termOriginated");
-    assertEq(mortgagePosition.termBalance, 63035000000000000000028, "termBalance");
+    assertEq(mortgagePosition.termBalance, 126070000000000000000020, "termBalance");
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "termPaid");
-    assertEq(mortgagePosition.amountConverted, 50_000e18, "amountConverted");
+    assertEq(mortgagePosition.termConverted, 63035000000000000000010, "termConverted");
+    assertEq(mortgagePosition.amountConverted, 0, "amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "penaltyPaid");
     assertEq(mortgagePosition.paymentsMissed, 0, "paymentsMissed");
@@ -235,6 +244,11 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "status");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      50_000e18,
+      "convertPaymentToPrincipal(termConverted)"
+    );
 
     // Set the refinance rate to 10% ($5k fee)
     vm.startPrank(admin1);
@@ -267,7 +281,7 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
     assertEq(mortgagePosition.collateral, address(btc), "collateral");
     assertEq(mortgagePosition.collateralDecimals, 8, "collateralDecimals");
     assertEq(mortgagePosition.collateralAmount, 2e8, "collateralAmount");
-    assertEq(mortgagePosition.collateralConverted, Math.mulDiv(1e8, 11000, 3 * 1e4), "collateralConverted");
+    assertEq(mortgagePosition.collateralConverted, expectedCollateralConverted, "collateralConverted");
     assertEq(mortgagePosition.subConsol, address(btcSubConsol), "subConsol");
     assertEq(mortgagePosition.interestRate, 500, "interestRate");
     assertEq(mortgagePosition.dateOriginated, block.timestamp, "dateOriginated");

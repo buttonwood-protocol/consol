@@ -135,6 +135,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.amountBorrowed, 100_000e18, "[1] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[1] amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "[1] termPaid");
+    assertEq(mortgagePosition.termConverted, 0, "[1] termConverted");
     assertEq(mortgagePosition.amountConverted, 0, "[1] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[1] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[1] penaltyPaid");
@@ -254,6 +255,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.amountBorrowed, 150_000e18, "[2] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[2] amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "[2] termPaid");
+    assertEq(mortgagePosition.termConverted, 0, "[2] termConverted");
     assertEq(mortgagePosition.amountConverted, 0, "[2] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[2] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[2] penaltyPaid");
@@ -304,8 +306,9 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     conversionQueue.processWithdrawalRequests(1);
     vm.stopPrank();
 
-    // Estimate how much of the BTC should have been converted ($120k worth of BTC at a price of $112.5k)
-    uint256 convertedBTC = Math.mulDiv(1e8, 120_000e18, 112_500e18);
+    // Estimate how much of the BTC should have been converted (100_000e18 + interest worth of BTC at a price of $112.5k)
+    uint256 expectedTermConverted = mortgagePosition.convertPrincipalToPayment(100_000e18);
+    uint256 convertedBTC = Math.mulDiv(expectedTermConverted, 1e8, 112_500e18);
 
     // Validate the the arbitrager received convertedBTC amount of BTC
     assertEq(btc.balanceOf(address(arbitrager)), convertedBTC, "btc.Balance");
@@ -321,11 +324,12 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.interestRate, 1046, "[3] interestRate");
     assertEq(mortgagePosition.dateOriginated, originalDateOriginated, "[3] dateOriginated");
     assertEq(mortgagePosition.termOriginated, block.timestamp, "[3] termOriginated");
-    assertEq(mortgagePosition.termBalance, 65690000000000000000028, "[3] termBalance");
+    assertEq(mortgagePosition.termBalance, 197070000000000000000012, "[3] termBalance");
     assertEq(mortgagePosition.amountBorrowed, 150_000e18, "[3] amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "[3] amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "[3] termPaid");
-    assertEq(mortgagePosition.amountConverted, 100_000e18, "[3] amountConverted");
+    assertEq(mortgagePosition.termConverted, expectedTermConverted, "[3] termConverted");
+    assertEq(mortgagePosition.amountConverted, 0, "[3] amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "[3] penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "[3] penaltyPaid");
     assertEq(mortgagePosition.paymentsMissed, 0, "[3] paymentsMissed");
@@ -333,6 +337,11 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "[3] totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, false, "[3] hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[3] status");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      100_000e18,
+      "[3] convertPaymentToPrincipal(termConverted)"
+    );
 
     // Validate that the mortgagePosition is still in the conversion queue
     assertEq(conversionQueue.mortgageHead(), mortgagePosition.tokenId, "[3] mortgageHead");

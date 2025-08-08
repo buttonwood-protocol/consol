@@ -32,30 +32,6 @@ interface IConversionQueue is IMortgageQueue, ILenderQueue, IPausable, IConversi
   function subConsol() external view returns (address);
 
   /**
-   * @notice The lump sum interest rate in basis points
-   * @return The lump sum interest rate in basis points
-   */
-  function lumpSumInterestRateBps() external view returns (uint16);
-
-  /**
-   * @notice Sets the lump sum interest rate in basis points
-   * @param lumpSumInterestRateBps_ The lump sum interest rate in basis points
-   */
-  function setLumpSumInterestRateBps(uint16 lumpSumInterestRateBps_) external;
-
-  /**
-   * @notice The lump sum interest rate in basis points for a mortgage with a payment plan
-   * @return The lump sum interest rate in basis points for a mortgage with a payment plan
-   */
-  function paymentPlanLumpSumInterestRateBps() external view returns (uint16);
-
-  /**
-   * @notice Sets the lump sum interest rate in basis points for a mortgage with a payment plan
-   * @param paymentPlanLumpSumInterestRateBps_ The lump sum interest rate in basis points for a mortgage with a payment plan
-   */
-  function setPaymentPlanLumpSumInterestRateBps(uint16 paymentPlanLumpSumInterestRateBps_) external;
-
-  /**
    * @notice Sets the price multiplier for calculating the conversion price of a mortgage position in basis points
    * @param priceMultiplierBps_ The price multiplier in basis points
    */

@@ -80,8 +80,6 @@ contract BaseTest is Test {
   uint16 public refinanceRate = 50; // 50 bps
   uint8 public constant DEFAULT_MORTGAGE_PERIODS = 36; // 36 Month mortage
   OriginationPoolConfig public originationPoolConfig;
-  uint16 public conversionLumpSumInterestRateBps = 1000; // 10%
-  uint16 public conversionPaymentPlanLumpSumInterestRateBps = 2000; // 20%
   uint256 public conversionPriceMultiplierBps = 5000; // 50%
 
   function _createGeneralManager() internal {
@@ -146,8 +144,6 @@ contract BaseTest is Test {
       address(wbtc),
       IERC20Metadata(address(wbtc)).decimals(),
       address(subConsol),
-      conversionLumpSumInterestRateBps,
-      conversionPaymentPlanLumpSumInterestRateBps,
       conversionPriceMultiplierBps,
       address(consol),
       address(generalManager),

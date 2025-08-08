@@ -220,8 +220,9 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
    * @param tokenId The tokenId of the mortgage position
    * @param amount The amount of the principal being coverted
    * @param collateralAmount The amount of the collateral being withdrawn during the conversion
+   * @param receiver The address receiving the converted collateral
    */
-  function convert(uint256 tokenId, uint256 amount, uint256 collateralAmount) external;
+  function convert(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver) external;
 
   /**
    * @notice Requests to expand the balance sheet of a mortgage position by adding addtional principal and collateral to the mortgage position. Only callable by whitelisted addresses.

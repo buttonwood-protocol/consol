@@ -10,7 +10,6 @@ import {WithdrawalRequest} from "./types/WithdrawalRequest.sol";
 import {IConsol} from "./interfaces/IConsol/IConsol.sol";
 import {IRebasingERC20} from "./RebasingERC20.sol";
 import {MortgageMath} from "./libraries/MortgageMath.sol";
-import {ISubConsol} from "./interfaces/ISubConsol/ISubConsol.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IConversionQueue, ILenderQueue} from "./interfaces/IConversionQueue/IConversionQueue.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
@@ -46,14 +45,6 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
   /**
    * @inheritdoc IConversionQueue
    */
-  uint16 public override lumpSumInterestRateBps;
-  /**
-   * @inheritdoc IConversionQueue
-   */
-  uint16 public override paymentPlanLumpSumInterestRateBps;
-  /**
-   * @inheritdoc IConversionQueue
-   */
   uint256 public override priceMultiplierBps;
   /**
    * @inheritdoc IPausable
@@ -65,8 +56,6 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
    * @param asset_ The address of the asset to convert
    * @param decimals_ The number of decimals of the asset
    * @param subConsol_ The address of the subConsol contract
-   * @param lumpSumInterestRateBps_ The lump sum interest rate basis points
-   * @param paymentPlanLumpSumInterestRateBps_ The lump sum interest rate basis points for a mortgage with a payment plan
    * @param priceMultiplierBps_ The price multiplier basis points
    * @param consol_ The address of the Consol contract
    * @param generalManager_ The address of the GeneralManager contract
@@ -76,8 +65,6 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
     address asset_,
     uint8 decimals_,
     address subConsol_,
-    uint16 lumpSumInterestRateBps_,
-    uint16 paymentPlanLumpSumInterestRateBps_,
     uint256 priceMultiplierBps_,
     address consol_,
     address generalManager_,
@@ -86,8 +73,6 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
     generalManager = generalManager_;
     decimals = decimals_;
     subConsol = subConsol_;
-    lumpSumInterestRateBps = lumpSumInterestRateBps_;
-    paymentPlanLumpSumInterestRateBps = paymentPlanLumpSumInterestRateBps_;
     priceMultiplierBps = priceMultiplierBps_;
   }
 
@@ -113,30 +98,6 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
   {
     return interfaceId == type(IConversionQueue).interfaceId || LenderQueue.supportsInterface(interfaceId)
       || MortgageQueue.supportsInterface(interfaceId);
-  }
-
-  /**
-   * @inheritdoc IConversionQueue
-   */
-  function setLumpSumInterestRateBps(uint16 lumpSumInterestRateBps_)
-    external
-    override
-    onlyRole(Roles.DEFAULT_ADMIN_ROLE)
-  {
-    lumpSumInterestRateBps = lumpSumInterestRateBps_;
-    emit LumpSumInterestRateBpsSet(lumpSumInterestRateBps_);
-  }
-
-  /**
-   * @inheritdoc IConversionQueue
-   */
-  function setPaymentPlanLumpSumInterestRateBps(uint16 paymentPlanLumpSumInterestRateBps_)
-    external
-    override
-    onlyRole(Roles.DEFAULT_ADMIN_ROLE)
-  {
-    paymentPlanLumpSumInterestRateBps = paymentPlanLumpSumInterestRateBps_;
-    emit PaymentPlanLumpSumInterestRateBpsSet(paymentPlanLumpSumInterestRateBps_);
   }
 
   /**
@@ -169,19 +130,17 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
    * @dev Calculates the collateral to use out of a mortgage position for a withdrawal request
    * @param mortgagePosition The mortgage position to calculate the collateral to use for
    * @param amountToUse The amount of principal to use for the withdrawal request
-   * @param price The current price of the asset
    * @return The collateral to use for the withdrawal request
    */
-  function _calculateCollateralToUse(MortgagePosition memory mortgagePosition, uint256 amountToUse, uint256 price)
+  function _calculateCollateralToUse(MortgagePosition memory mortgagePosition, uint256 amountToUse)
     internal
     view
     returns (uint256)
   {
-    uint16 paymentBps = mortgagePosition.hasPaymentPlan ? paymentPlanLumpSumInterestRateBps : lumpSumInterestRateBps;
-    // Apply the lump sum interest rate to calculate the amountToUse
-    amountToUse = Math.mulDiv(amountToUse, Constants.BPS + paymentBps, Constants.BPS, Math.Rounding.Floor);
+    // Fetch the trigger price for the mortgage
+    uint256 triggerPrice = _mortgageNodes[mortgagePosition.tokenId].triggerPrice;
     // Figure out how much collateral corresponds to the amountToUse at the current price
-    return Math.mulDiv(amountToUse, (10 ** mortgagePosition.collateralDecimals), price, Math.Rounding.Floor);
+    return Math.mulDiv(amountToUse, (10 ** mortgagePosition.collateralDecimals), triggerPrice, Math.Rounding.Floor);
   }
 
   /**
@@ -256,16 +215,13 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
       IConsol(consol).burnExcessShares(request.shares, request.amount);
 
       // Calculate how much from the mortgagePosition is available for processing
-      uint256 amountToUse = Math.min(mortgagePosition.amountOutstanding(), request.amount);
+      uint256 amountToUse = Math.min(mortgagePosition.principalRemaining(), request.amount);
+
+      // Calculate the paymentToUse by applying the interest
+      uint256 paymentToUse = mortgagePosition.convertPrincipalToPayment(amountToUse);
 
       // Calculate how much collateral to use
-      uint256 collateralToUse = _calculateCollateralToUse(mortgagePosition, amountToUse, currentConversionPrice);
-
-      // Withdraw request.amount of SubConsol from the Consol contract
-      IConsol(consol).withdraw(subConsol, amountToUse);
-
-      // Withdraw the Collateral and burn the SubConsol
-      ISubConsol(subConsol).withdrawCollateralAsync(request.account, collateralToUse, amountToUse);
+      uint256 collateralToUse = _calculateCollateralToUse(mortgagePosition, paymentToUse);
 
       // Request used up
       if (amountToUse >= request.amount) {
@@ -293,11 +249,14 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
           IRebasingERC20(consol).convertToShares(withdrawalRequests[withdrawalQueueHead].amount);
       }
 
-      // Update the values on the MortgagePosition
-      IGeneralManager(generalManager).convert(mortgageTokenId, amountToUse, collateralToUse);
+      // Send the Consol to the GeneralManager
+      IConsol(consol).transfer(generalManager, amountToUse);
 
-      // MortgagePosition used up (close it)
-      if (amountToUse >= mortgagePosition.amountOutstanding()) {
+      // Update the values on the MortgagePosition
+      IGeneralManager(generalManager).convert(mortgageTokenId, amountToUse, collateralToUse, request.account);
+
+      // MortgagePosition used up (pop it)
+      if (amountToUse >= mortgagePosition.principalRemaining()) {
         // Increment the collected gas fees for the caller
         collectedGasFees += _mortgageNodes[mortgageTokenId].gasFee;
         // Update MortgageQueue
@@ -328,7 +287,7 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
       ILoanManager(IGeneralManager(generalManager).loanManager()).getMortgagePosition(mortgageTokenId);
 
     // Validate that the mortgage position is inactive
-    if (mortgagePosition.status == MortgageStatus.ACTIVE && mortgagePosition.amountOutstanding() > 0) {
+    if (mortgagePosition.status == MortgageStatus.ACTIVE && mortgagePosition.principalRemaining() > 0) {
       revert OnlyInactiveMortgage(mortgageTokenId);
     }
 

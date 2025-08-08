@@ -13,6 +13,7 @@ import {IOriginationPool} from "../../src/interfaces/IOriginationPool/IOriginati
 import {IOrderPool} from "../../src/interfaces/IOrderPool/IOrderPool.sol";
 import {IGeneralManager} from "../../src/interfaces/IGeneralManager/IGeneralManager.sol";
 import {MortgageNode} from "../../src/types/MortgageNode.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title Integration_13_ConvertedWithPenaltiesTest
@@ -130,6 +131,7 @@ contract Integration_13_ConvertedWithPenaltiesTest is IntegrationBaseTest {
     assertEq(mortgagePosition.amountBorrowed, 120_000e18, "amountBorrowed");
     assertEq(mortgagePosition.amountPrior, 0, "amountPrior");
     assertEq(mortgagePosition.termPaid, 0, "termPaid");
+    assertEq(mortgagePosition.termConverted, 0, "termConverted");
     assertEq(mortgagePosition.amountConverted, 0, "amountConverted");
     assertEq(mortgagePosition.penaltyAccrued, 0, "penaltyAccrued");
     assertEq(mortgagePosition.penaltyPaid, 0, "penaltyPaid");
@@ -183,18 +185,31 @@ contract Integration_13_ConvertedWithPenaltiesTest is IntegrationBaseTest {
     // Price of BTC raises to $180k
     MockPyth(address(pyth)).setPrice(pythPriceIdBTC, 180_000e8, 4349253107, -8, block.timestamp);
 
+    // Double-checking the arbitrager doesn't already have some BTC
+    assertEq(btc.balanceOf(address(arbitrager)), 0, "btc.balanceOf(arbitrager) starts off at 0");
+
     // Rando processes the conversion queue
     vm.startPrank(rando);
     conversionQueue.processWithdrawalRequests(1);
     vm.stopPrank();
 
-    // Validate that the Arbitrager has (120 + 10%) worth of BTC (0.8 BTC)
-    assertEq(btc.balanceOf(address(arbitrager)), 0.73333333e8, "btc.balanceOf(arbitrager)");
+    // Calculate expectedCollateralConverted (termConverted / triggerPrice)
+    uint256 expectedTermConverted = 132456000000000000000024;
+    uint256 expectedCollateralConverted = Math.mulDiv(expectedTermConverted, 1e8, 180_000e18);
+
+    // Validate that the Arbitrager has expectedCollateralConverted amount of BTC
+    assertEq(btc.balanceOf(address(arbitrager)), expectedCollateralConverted, "btc.balanceOf(arbitrager)");
 
     // Validate that the mortgage position has been completely converted and is no longer enqueued
     mortgagePosition = loanManager.getMortgagePosition(1);
-    assertEq(mortgagePosition.collateralConverted, 0.73333333e8, "collateralConverted");
-    assertEq(mortgagePosition.amountConverted, 120_000e18, "amountConverted");
+    assertEq(mortgagePosition.collateralConverted, expectedCollateralConverted, "collateralConverted");
+    assertEq(mortgagePosition.amountConverted, 0, "amountConverted (no refinance yet)");
+    assertEq(
+      mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termConverted),
+      120_000e18,
+      "convertPaymentToPrincipal(termConverted)"
+    );
+    assertEq(mortgagePosition.termConverted, expectedTermConverted, "termConverted");
     assertEq(conversionQueue.mortgageHead(), 0, "mortgageHead");
     assertEq(conversionQueue.mortgageTail(), 0, "mortgageTail");
     assertEq(conversionQueue.mortgageSize(), 0, "mortgageSize");
@@ -227,6 +242,6 @@ contract Integration_13_ConvertedWithPenaltiesTest is IntegrationBaseTest {
     vm.stopPrank();
 
     // Validate that the borrower's balances
-    assertEq(btc.balanceOf(address(borrower)), 2e8 - 0.73333333e8, "usdt.balanceOf(borrower)");
+    assertEq(btc.balanceOf(address(borrower)), 2e8 - expectedCollateralConverted, "btc.balanceOf(borrower)");
   }
 }

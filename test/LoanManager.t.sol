@@ -674,9 +674,9 @@ contract LoanManagerTest is BaseTest {
 
     // Validate that the term paid has not changed
     assertEq(loanManager.getMortgagePosition(tokenId).termPaid, 0, "Term paid should not have changed");
-    // Validate that the amountOutstanding has not changed
+    // Validate that the principalRemaining has not changed
     assertEq(
-      loanManager.getMortgagePosition(tokenId).amountOutstanding(),
+      loanManager.getMortgagePosition(tokenId).principalRemaining(),
       amountBorrowed,
       "Amount outstanding should not have changed"
     );
@@ -1127,7 +1127,7 @@ contract LoanManagerTest is BaseTest {
 
     // New scope to avoid stack too deep
     {
-      uint256 refinanceFee = Math.mulDiv(oldMortgagePosition.amountOutstanding(), refinanceRate, 1e4);
+      uint256 refinanceFee = Math.mulDiv(oldMortgagePosition.principalRemaining(), refinanceRate, 1e4);
 
       // Deal consol to the borrower and approve the collateral to the loan manager
       _mintConsolViaUsdx(borrower, refinanceFee);
@@ -1146,7 +1146,7 @@ contract LoanManagerTest is BaseTest {
       vm.startPrank(borrower);
       vm.expectEmit(true, true, true, true, address(loanManager));
       emit ILoanManagerEvents.RefinanceMortgage(
-        1, block.timestamp, refinanceFee, newInterestRate, oldMortgagePosition.amountOutstanding()
+        1, block.timestamp, refinanceFee, newInterestRate, oldMortgagePosition.principalRemaining()
       );
       loanManager.refinanceMortgage(1, newTotalPeriods);
       vm.stopPrank();
@@ -1155,7 +1155,7 @@ contract LoanManagerTest is BaseTest {
     loanManager.getMortgagePosition(1);
 
     uint256 expectedMonthlyPayment = MortgageMath.calculateTermBalance(
-      oldMortgagePosition.amountOutstanding(), newInterestRate, newTotalPeriods, newTotalPeriods
+      oldMortgagePosition.principalRemaining(), newInterestRate, newTotalPeriods, newTotalPeriods
     ) / newTotalPeriods;
 
     // Validate that the mortgage position has been updated
@@ -1175,21 +1175,21 @@ contract LoanManagerTest is BaseTest {
       "Total periods should have been updated to the new total periods"
     );
 
-    // Validate that amountOutstanding has not changed
+    // Validate that principalRemaining has not changed
     assertEq(
-      loanManager.getMortgagePosition(1).amountOutstanding(),
-      oldMortgagePosition.amountOutstanding(),
+      loanManager.getMortgagePosition(1).principalRemaining(),
+      oldMortgagePosition.principalRemaining(),
       "Amount outstanding should not have changed"
     );
     assertEq(loanManager.getMortgagePosition(1).termPaid, 0, "Term paid should have been reset to 0");
     assertEq(
       loanManager.getMortgagePosition(1).penaltyAccrued,
-      Math.mulDiv(oldMortgagePosition.amountOutstanding(), refinanceRate, 1e4),
+      Math.mulDiv(oldMortgagePosition.principalRemaining(), refinanceRate, 1e4),
       "Refinance fee should have been added to the penalty accrued"
     );
     assertEq(
       loanManager.getMortgagePosition(1).penaltyPaid,
-      Math.mulDiv(oldMortgagePosition.amountOutstanding(), refinanceRate, 1e4),
+      Math.mulDiv(oldMortgagePosition.principalRemaining(), refinanceRate, 1e4),
       "Refinance fee should have been added to the penalty paid"
     );
 
@@ -1482,10 +1482,10 @@ contract LoanManagerTest is BaseTest {
       wbtc.balanceOf(address(forfeitedAssetsPool)), collateralAmount, "Forfeited assets pool should have the collateral"
     );
 
-    // Validate that the forfeited assets pool has total supply equal to the liabilities (amountOutstanding)
+    // Validate that the forfeited assets pool has total supply equal to the liabilities (principalRemaining)
     assertEq(
       forfeitedAssetsPool.totalSupply(),
-      loanManager.getMortgagePosition(tokenId).amountOutstanding(),
+      loanManager.getMortgagePosition(tokenId).principalRemaining(),
       "Forfeited assets pool total supply should be equal to the amount outstanding"
     );
 

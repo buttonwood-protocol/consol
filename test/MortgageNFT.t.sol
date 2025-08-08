@@ -99,6 +99,7 @@ contract MortgageNFTTest is BaseTest {
           amountBorrowed: 0,
           amountPrior: 0,
           termPaid: 0,
+          termConverted: 0,
           amountConverted: 0,
           penaltyAccrued: 0,
           penaltyPaid: 0,

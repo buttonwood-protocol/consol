@@ -97,14 +97,6 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
       IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, admin),
       "Admin does not have the default admin role"
     );
-    assertEq(
-      conversionQueue.lumpSumInterestRateBps(), conversionLumpSumInterestRateBps, "Lump sum interest rate BPS mismatch"
-    );
-    assertEq(
-      conversionQueue.paymentPlanLumpSumInterestRateBps(),
-      conversionPaymentPlanLumpSumInterestRateBps,
-      "Payment plan lump sum interest rate BPS mismatch"
-    );
     assertEq(conversionQueue.priceMultiplierBps(), conversionPriceMultiplierBps, "Price multiplier BPS mismatch");
   }
 
@@ -144,34 +136,6 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     // Assert that the conversion price is equal to the raw price
     uint256 expectedConversionPrice = uint256(uint256(uint64(rawPrice)) * 1e10);
     assertEq(conversionPrice, expectedConversionPrice, "Conversion price mismatch");
-  }
-
-  function test_setLumpSumInterestRateBps_revertsWhenDoesNotHaveAdminRole(
-    address caller,
-    uint16 newLumpSumInterestRateBps
-  ) public {
-    // Make sure the caller does not have the admin role
-    vm.assume(!IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
-
-    // Attempt to set the lump sum interest rate BPS without the admin role
-    vm.startPrank(caller);
-    vm.expectRevert(
-      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
-    );
-    conversionQueue.setLumpSumInterestRateBps(newLumpSumInterestRateBps);
-    vm.stopPrank();
-  }
-
-  function test_setLumpSumInterestRateBps(uint16 newLumpSumInterestRateBps) public {
-    // Attempt to set the lump sum interest rate BPS as admin
-    vm.startPrank(admin);
-    vm.expectEmit(true, true, true, true);
-    emit LumpSumInterestRateBpsSet(newLumpSumInterestRateBps);
-    conversionQueue.setLumpSumInterestRateBps(newLumpSumInterestRateBps);
-    vm.stopPrank();
-
-    // Validate that the lump sum interest rate BPS is set to the new value
-    assertEq(conversionQueue.lumpSumInterestRateBps(), newLumpSumInterestRateBps, "Lump sum interest rate BPS mismatch");
   }
 
   function test_setPriceMultiplierBps_revertsWhenDoesNotHaveAdminRole(address caller, uint16 newPriceMultiplierBps)
@@ -305,26 +269,35 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
       "MortgagePosition1 should have a purchase price of $100k"
     );
 
+    // Fetch mortgagePosition1
+    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+
+    // Calculate expectedTermConverted
+    uint256 expectedTermConverted = mortgagePosition1.convertPrincipalToPayment(10_000e18);
+
     // Have the keeper process the withdrawal request
     vm.startPrank(keeper);
     conversionQueue.processWithdrawalRequests(1);
     vm.stopPrank();
 
-    // Fetch mortgagePosition1
-    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+    // Update mortgagePosition1
+    mortgagePosition1 = loanManager.getMortgagePosition(1);
 
-    uint256 expectedCollateralToUse = 6e6; // $12k worth of btc when the price is $200k per btc
+    uint256 expectedCollateralToUse = Math.mulDiv(expectedTermConverted, 1e8, 150_000e18); // expectedTermConverted worth of btc when the price is $150k per btc
 
-    // Validate that the mortgage hasn't been fully converted yet, but has now had 10k * 1.27 of the amountBorrowed forgiven
-    assertEq(
-      mortgagePosition1.amountConverted,
+    // Validate fields on mortgagePosition
+    assertEq(mortgagePosition1.termConverted, expectedTermConverted, "termConverted should equal expectedTermConverted");
+    assertApproxEqAbs(
+      mortgagePosition1.convertPaymentToPrincipal(mortgagePosition1.termConverted),
       10_000e18,
-      "MortgagePosition1 should have had $10k of the amountBorrowed forgiven"
+      1,
+      "convertPaymentToPrincipal(termConverted) should equal 10_000e18"
     );
+    assertEq(mortgagePosition1.amountConverted, 0, "amountConverted should equal 0 (no refinance yet)");
     assertEq(
       mortgagePosition1.collateralConverted,
       expectedCollateralToUse,
-      "MortgagePosition1 should have had expectedCollateralToUse of collateral converted"
+      "collateralConverted should equal expectedCollateralToUse"
     );
     assertEq(
       uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "MortgagePosition1 should be in the active status"
@@ -362,51 +335,76 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     // Set the price oracle to $200k per btc
     mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
 
+    // Fetch mortgagePosition1 and mortgagePosition2 before conversions
+    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+    MortgagePosition memory mortgagePosition2 = loanManager.getMortgagePosition(2);
+
+    // Validate the termBalance of mortgagePosition1 and mortgagePosition2
+    assertEq(
+      mortgagePosition1.termBalance,
+      127000000000000000000008,
+      "mortgagePosition1.termBalance == 127000000000000000000008"
+    );
+    assertEq(
+      mortgagePosition2.termBalance,
+      254000000000000000000016,
+      "mortgagePosition2.termBalance == 254000000000000000000016"
+    );
+
+    // Mortgage1: Calculate the expected amountToUse, collateralToUse, and subConsolToUse
+    uint256 expectedTermConverted1 = mortgagePosition1.termBalance;
+    uint256 expectedCollateralToUse1 = Math.mulDiv(mortgagePosition1.termBalance, 1e8, 150_000e18);
+
+    // Mortgage2: Calculate the expected amountToUse, collateralToUse, and subConsolToUse
+    uint256 expectedPrincipalConverted2 = 150_000e18;
+    uint256 expectedTermConverted2 = mortgagePosition2.convertPrincipalToPayment(expectedPrincipalConverted2);
+    uint256 expectedCollateralToUse2 = Math.mulDiv(expectedTermConverted2, 1e8, 150_000e18);
+
     // Have the keeper process the withdrawal request
     vm.startPrank(keeper);
     conversionQueue.processWithdrawalRequests(1);
     vm.stopPrank();
 
-    // Fetch mortgagePosition1
-    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+    // Update mortgagePosition1
+    mortgagePosition1 = loanManager.getMortgagePosition(1);
 
-    uint256 expectedCollateralToUse1 = 6e7; // $120k worth of btc when the price is $200k per btc
-
-    // Validate that the mortgage has now had $100k of the amountBorrowed forgiven (the entire amountBorrowed)
+    // Validate the values of mortgagePosition1
     assertEq(
-      mortgagePosition1.amountConverted,
-      mortgagePosition1.amountBorrowed,
-      "MortgagePosition1 should have had all of the amountBorrowed forgiven"
+      mortgagePosition1.amountConverted, 0, "mortgagePosition1.amountConverted should equal 0 (no refinance yet)"
     );
-    assertEq(mortgagePosition1.amountOutstanding(), 0, "MortgagePosition1 should have had 0 amountOutstanding");
+    assertEq(
+      mortgagePosition1.termConverted,
+      expectedTermConverted1,
+      "mortgagePosition1.termConverted should equal expectedTermConverted1"
+    );
     assertEq(
       mortgagePosition1.collateralConverted,
       expectedCollateralToUse1,
-      "MortgagePosition1 should have had expectedCollateralToUse1 of collateral converted"
+      "mortgagePosition1.collateralConverted should equal expectedCollateralToUse1"
     );
     assertEq(
-      uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "MortgagePosition1 should be in the active status"
+      uint8(mortgagePosition1.status), uint8(MortgageStatus.ACTIVE), "mortgagePosition1 should be in the active status"
     );
 
-    // Fetch mortgagePosition
-    MortgagePosition memory mortgagePosition = loanManager.getMortgagePosition(2);
+    // Update mortgagePosition2
+    mortgagePosition2 = loanManager.getMortgagePosition(2);
 
-    uint256 expectedCollateralToUse2 = 9e7; // $180k worth of btc when the price is $200k per btc
-
-    // Validate that the mortgage hasn't been fully converted yet, but has now had $150k of the amountBorrowed forgiven
+    // // Validate the values of mortgagePosition2
     assertEq(
-      mortgagePosition.amountConverted,
-      150_000e18,
-      "MortgagePosition should have had 150k of the amountBorrowed forgiven"
+      mortgagePosition2.amountConverted, 0, "mortgagePosition2.amountConverted should equal 0 (no refinance yet)"
     );
-    assertEq(mortgagePosition.amountOutstanding(), 50_000e18, "MortgagePosition should have had 50k amountOutstanding");
     assertEq(
-      mortgagePosition.collateralConverted,
+      mortgagePosition2.termConverted,
+      expectedTermConverted2,
+      "mortgagePosition2.termConverted should equal expectedTermConverted2"
+    );
+    assertEq(
+      mortgagePosition2.collateralConverted,
       expectedCollateralToUse2,
-      "MortgagePosition should have had expectedCollateralToUse2 of collateral converted"
+      "mortgagePosition2.collateralConverted should equal expectedCollateralToUse2"
     );
     assertEq(
-      uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "MortgagePosition should be in the active status"
+      uint8(mortgagePosition2.status), uint8(MortgageStatus.ACTIVE), "mortgagePosition2 should be in the active status"
     );
 
     // Validate lender3's new balances
@@ -433,10 +431,15 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     // Validate that the conversion queue has 2 mortgages
     assertEq(conversionQueue.mortgageSize(), 2, "Conversion queue does not have 2 mortgages");
 
-    // Now have Lender3 request a withdrawal of 250k consols
+    // Have Lender2 send 100k consols to lender3
+    vm.startPrank(lender2);
+    consol.transfer(lender3, 100_000e18);
+    vm.stopPrank();
+
+    // Now have Lender3 request a withdrawal of 406k consols
     vm.startPrank(lender3);
-    consol.approve(address(conversionQueue), 306_000e18);
-    conversionQueue.requestWithdrawal(306_000e18);
+    consol.approve(address(conversionQueue), 406_000e18);
+    conversionQueue.requestWithdrawal(406_000e18);
     vm.stopPrank();
 
     // Validate that there is 1 withdrawal request in the conversion queue
@@ -444,7 +447,7 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
     // Validate that the consol balances of lender3 and the conversion queue are correct
     assertEq(consol.balanceOf(lender3), 0, "Lender3 should have 0k consols left");
-    assertEq(consol.balanceOf(address(conversionQueue)), 306_000e18, "Conversion queue should have 306k consols");
+    assertEq(consol.balanceOf(address(conversionQueue)), 406_000e18, "Conversion queue should have 406k consols");
 
     // Set the price oracle to $200k per btc
     mockPyth.setPrice(BTC_PRICE_ID, 200_000e8, 100e8, -8, block.timestamp);
@@ -471,11 +474,15 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     // Validate that the conversion queue has 2 mortgages
     assertEq(conversionQueue.mortgageSize(), 2, "Conversion queue does not have 2 mortgages");
 
-    // Now have Lender3 request a withdrawal of 250k consols
+    // Now have Lender3 request a withdrawal of 306k consols (but only 300k is fillable)
     vm.startPrank(lender3);
     consol.approve(address(conversionQueue), 306_000e18);
     conversionQueue.requestWithdrawal(306_000e18);
     vm.stopPrank();
+
+    // Fetch mortgagePosition1 and mortgagePosition2 before conversions
+    MortgagePosition memory mortgagePosition1 = loanManager.getMortgagePosition(1);
+    MortgagePosition memory mortgagePosition2 = loanManager.getMortgagePosition(2);
 
     // Validate that there is 1 withdrawal request in the conversion queue
     assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue does not have 1 withdrawal request");
@@ -508,7 +515,12 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     assertEq(conversionQueue.withdrawalQueueLength(), 1, "Conversion queue should still have 1 withdrawal request");
 
     // Calculate the expected wbtc balance of lender3
-    uint256 expectedWbtc = Math.mulDiv(360_000e18, 1e8, 200_000e18); // ($300k * 1.2) worth of wbtc at a price of $200k/wbtc
+    uint256 expectedWbtc;
+    {
+      uint256 expectedWbtc1 = Math.mulDiv(mortgagePosition1.termBalance, 1e8, 150_000e18);
+      uint256 expectedWbtc2 = Math.mulDiv(mortgagePosition2.termBalance, 1e8, 150_000e18);
+      expectedWbtc = expectedWbtc1 + expectedWbtc2;
+    }
 
     // Validate that the consol balances of lender3 and the conversion queue are correct
     assertEq(wbtc.balanceOf(lender3), expectedWbtc, "Lender3 should have expectedWbtc amount of wbtc");
