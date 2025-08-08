@@ -35,6 +35,7 @@ import {PurchaseOrder} from "../src/types/orders/PurchaseOrder.sol";
 import {OriginationParameters} from "../src/types/orders/OriginationParameters.sol";
 import {Constants} from "../src/libraries/Constants.sol";
 import {MortgageMath} from "../src/libraries/MortgageMath.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract GeneralManagerTest is BaseTest {
   using MortgageMath for MortgagePosition;
@@ -1348,6 +1349,13 @@ contract GeneralManagerTest is BaseTest {
       abi.encode(mortgagePosition)
     );
 
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
+    );
+
     // Attempt to request a balance sheet expansion with an unregistered origination pool
     vm.startPrank(balanceSheetExpander);
     vm.expectRevert(
@@ -1381,6 +1389,13 @@ contract GeneralManagerTest is BaseTest {
       address(loanManager),
       abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
       abi.encode(mortgagePosition)
+    );
+
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
     );
 
     // Attempt to request a balance sheet expansion with unsupported total periods
@@ -1419,6 +1434,13 @@ contract GeneralManagerTest is BaseTest {
       address(loanManager),
       abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
       abi.encode(mortgagePosition)
+    );
+
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
     );
 
     // Attempt to request a balance sheet expansion with unsupported total periods
@@ -1482,6 +1504,13 @@ contract GeneralManagerTest is BaseTest {
       address(loanManager),
       abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
       abi.encode(mortgagePosition)
+    );
+
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
     );
 
     // Request a compounding balance sheet expansion
@@ -1603,6 +1632,13 @@ contract GeneralManagerTest is BaseTest {
       abi.encode(mortgagePosition)
     );
 
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
+    );
+
     // Request a non-compounding balance sheet expansion
     vm.startPrank(balanceSheetExpander);
     generalManager.requestBalanceSheetExpansion{value: orderPoolGasFee + mortgageGasFee}(expansionRequest);
@@ -1692,8 +1728,8 @@ contract GeneralManagerTest is BaseTest {
     orderPool.setGasFee(orderPoolGasFee);
     vm.stopPrank();
 
-    // Deal the borrower all of the gas fees
-    vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
+    // Deal the balanceSheetExpander all of the gas fees
+    vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Set the oracle values
     mockPyth.setPrice(TREASURY_3YR_ID, 384700003, 384706, -8, block.timestamp);
@@ -1714,14 +1750,14 @@ contract GeneralManagerTest is BaseTest {
     originationPool.deposit(amountBorrowed);
     vm.stopPrank();
 
-    // Minting collateral to the borrower and approving the generalManager to spend it
-    vm.startPrank(borrower);
-    ERC20Mock(address(wbtc)).mint(borrower, requiredCollateralAmount);
+    // Minting collateral to the balanceSheetExpander and approving the generalManager to spend it
+    vm.startPrank(balanceSheetExpander);
+    ERC20Mock(address(wbtc)).mint(balanceSheetExpander, requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(address(generalManager), requiredCollateralAmount);
     vm.stopPrank();
 
     // Request a compounding mortgage without a payment plan
-    vm.startPrank(borrower);
+    vm.startPrank(balanceSheetExpander);
     generalManager.requestMortgageCreation{value: orderPoolGasFee + mortgageGasFee}(creationRequest);
     vm.stopPrank();
 
@@ -1811,8 +1847,7 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
 
     // Validate that the mortgage belongs to the original owner
-    assertEq(mortgageNFT.balanceOf(borrower), 1, "Borrower should have 1 mortgage");
-    assertEq(mortgageNFT.balanceOf(balanceSheetExpander), 0, "BalanceSheetExpander should have 0 mortgages");
+    assertEq(mortgageNFT.balanceOf(balanceSheetExpander), 1, "BalanceSheetExpander should have 1 mortgage");
 
     // Validate that the mortgage NFT has the correct mortgageId
     assertEq(
