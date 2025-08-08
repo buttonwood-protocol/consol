@@ -109,6 +109,11 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     if (msg.value < gasFee) {
       revert InsufficientGasFee(gasFee, msg.value);
     }
+    
+    // Validate that the expiration is in the future
+    if (expiration < block.timestamp) {
+      revert InvalidExpiration(expiration, block.timestamp);
+    }
 
     // Set the index of the PurchaseOrder
     index = orderCount;
