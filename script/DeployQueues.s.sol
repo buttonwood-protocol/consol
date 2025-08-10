@@ -28,6 +28,7 @@ contract DeployQueues is DeployGeneralManager {
   }
 
   function deployUsdxQueue() public {
+    uint256 usdxWithdrawalGasFee = vm.envUint("USDX_WITHDRAWAL_GAS_FEE");
     usdxQueue = new UsdxQueue(address(usdx), address(consol), deployerAddress);
 
     // Grant admin role to admins
@@ -35,17 +36,24 @@ contract DeployQueues is DeployGeneralManager {
       UsdxQueue(address(usdxQueue)).grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]);
     }
 
+    // Set the withdrawal gas fee
+    UsdxQueue(address(usdxQueue)).setWithdrawalGasFee(usdxWithdrawalGasFee);
+
     // Renounce admin role
     UsdxQueue(address(usdxQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function deployForfeitedAssetsQueue() public {
+    uint256 forfeitedAssetsWithdrawalGasFee = vm.envUint("FORFEITED_ASSETS_WITHDRAWAL_GAS_FEE");
     forfeitedAssetsQueue = new ForfeitedAssetsQueue(address(forfeitedAssetsPool), address(consol), deployerAddress);
 
     // Grant admin role to admins
     for (uint256 i = 0; i < admins.length; i++) {
       ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]);
     }
+
+    // Set the withdrawal gas fee
+    ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).setWithdrawalGasFee(forfeitedAssetsWithdrawalGasFee);
 
     // Renounce admin role
     ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
