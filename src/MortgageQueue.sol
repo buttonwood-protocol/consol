@@ -210,7 +210,7 @@ contract MortgageQueue is Context, ERC165, AccessControl, IMortgageQueue {
   /**
    * @dev Finds the first mortgage position in the queue that has a trigger price less than or equal to the input trigger price
    * @param triggerPrice The trigger price to find the first MortgagePosition for.
-   * @return tokenId The tokenId of the first MortgagePosition in the Conversion Queue that has a trigger price greater than or equal to the input trigger price.
+   * @return tokenId The tokenId of the first MortgagePosition in the Conversion Queue that has a trigger price less than or equal to the input trigger price.
    */
   function _findFirstTriggered(uint256 triggerPrice) internal view returns (uint256 tokenId) {
     // If the list is empty return 0
