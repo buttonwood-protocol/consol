@@ -225,7 +225,7 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
   function convert(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver) external;
 
   /**
-   * @notice Requests to expand the balance sheet of a mortgage position by adding addtional principal and collateral to the mortgage position. Only callable by whitelisted addresses.
+   * @notice Requests to expand the balance sheet of a mortgage position by adding additional principal and collateral to the mortgage position. Only callable by whitelisted addresses.
    * @param expansionRequest The parameters of the balance sheet expansion being requested
    */
   function requestBalanceSheetExpansion(ExpansionRequest calldata expansionRequest) external payable;
