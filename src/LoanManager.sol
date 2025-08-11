@@ -329,7 +329,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     // Withdraw the principalPayment amount of SubConsol from the Consol contract
     _withdrawSubConsol(mortgagePositions[tokenId].subConsol, principalPayment);
 
-    // Burn the suprlus tokens accumulated in the loan manager (this represents interest getting redistributed to existing Consol holders)
+    // Burn the surplus tokens accumulated in the loan manager (this represents interest getting redistributed to existing Consol holders)
     IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
 
     // Emit a period pay event
@@ -471,7 +471,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     address forfeitedAssetsPool = IConsol(consol).forfeitedAssetsPool();
 
     if (inputToken == forfeitedAssetsPool && outputToken == mortgagePosition.subConsol) {
-      // Fetch the forfeited amount (this is extra SubConsol in LoanManager corresopnding to principal that was previously paid off)
+      // Fetch the forfeited amount (this is extra SubConsol in LoanManager corresponding to principal that was previously paid off)
       uint256 amountForfeited = MortgageMath.amountForfeited(mortgagePosition);
 
       // Pull out the collateral from the subConsol that was just pulled (plus the forfeited amount)
