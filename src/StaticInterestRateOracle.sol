@@ -10,11 +10,6 @@ import {IInterestRateOracle} from "./interfaces/IInterestRateOracle.sol";
  */
 contract StaticInterestRateOracle is IInterestRateOracle {
   /**
-   * @notice The number of decimals for percentages
-   * @return PERCENT_DECIMALS The number of decimals for percentages
-   */
-  int8 public constant PERCENT_DECIMALS = 2;
-  /**
    * @notice The number of decimals for basis points
    * @return BPS_DECIMALS The number of decimals for basis points
    */
