@@ -15,7 +15,6 @@ import {IOrderPool} from "../src/interfaces/IOrderPool/IOrderPool.sol";
 import {CreationRequest, BaseRequest} from "../src/types/orders/OrderRequests.sol";
 import {IConversionQueue} from "../src/interfaces/IConversionQueue/IConversionQueue.sol";
 import {IWHYPE9} from "./external/IWHYPE9.sol";
-import {console} from "forge-std/console.sol";
 
 contract LocalhostSetupPart2 is BaseScript {
   MockERC20 public usdToken0;
@@ -76,8 +75,6 @@ contract LocalhostSetupPart2 is BaseScript {
     pyth.setPrice(pythPriceId0, 50e8, 870832, -8, block.timestamp);
 
     // Mint collateral to the deployer to fulfill the order and grant the orderPool permission to spend it
-    console.log("deployAddress.balance", address(deployerAddress).balance);
-    console.log("collateralAmount", collateralAmount);
     collateral0.deposit{value: collateralAmount}();
     collateral0.approve(address(orderPool), collateralAmount);
 
