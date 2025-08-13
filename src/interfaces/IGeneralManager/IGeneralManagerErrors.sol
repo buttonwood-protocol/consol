@@ -16,6 +16,11 @@ interface IGeneralManagerErrors {
   error InvalidOriginationPool(address originationPool);
 
   /**
+   * @notice The origination pools array is empty
+   */
+  error EmptyOriginationPools();
+
+  /**
    * @notice The subConsol is not backed by the collateral or is not supported by the consol
    * @param collateral The address of the collateral
    * @param subConsol The address of the subConsol

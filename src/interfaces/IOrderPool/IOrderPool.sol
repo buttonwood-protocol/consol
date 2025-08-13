@@ -69,6 +69,7 @@ interface IOrderPool is IOrderPoolEvents, IOrderPoolErrors {
   /**
    * @notice Adds a PurchaseOrder to the OrderPool. Only callable by the general manager.
    * @param originationPools The addresses of the origination pools to deploy funds from
+   * @param borrowAmounts The amounts being borrowed from each origination pool
    * @param conversionQueue The address of the conversion queue to use
    * @param orderAmounts The amounts being collected from the borrower
    * @param mortgageParams The parameters for the mortgage being created
@@ -78,6 +79,7 @@ interface IOrderPool is IOrderPoolEvents, IOrderPoolErrors {
    */
   function sendOrder(
     address[] memory originationPools,
+    uint256[] memory borrowAmounts,
     address conversionQueue,
     OrderAmounts memory orderAmounts,
     MortgageParams memory mortgageParams,

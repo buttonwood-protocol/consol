@@ -10,7 +10,7 @@ pragma solidity ^0.8.0;
  * @param collateralAmount The amount of collateral escrowed in the Consol contract
  * @param subConsol The address of the SubConsol contract holding the collateral
  * @param interestRate The interest rate of the mortgage
- * @param amountBorrowed The amount being borrowed
+ * @param amountBorrowed The total amount being borrowed from all origination pools
  * @param totalPeriods The total umber of periods that the mortgage will last
  * @param hasPaymentPlan Whether the mortgage is hasPaymentPlan (periodic payment plan vs single payment)
  */

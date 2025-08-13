@@ -8,6 +8,7 @@ import {MortgageParams} from "../orders/MortgageParams.sol";
  * @param mortgageParams The parameters for the mortgage
  * @param fulfiller The address of the fulfiller
  * @param originationPools The addresses of the origination pools to deploy funds from
+ * @param borrowAmounts The amounts being borrowed from each origination pool. Sum must be equal to mortgageParams.amountBorrowed
  * @param conversionQueue The address of the conversion queue
  * @param hintPrevId The hintPrevId of the mortgage
  * @param expansion Whether the mortgage is a balance sheet expansion of an existing position
@@ -17,6 +18,7 @@ struct OriginationParameters {
   MortgageParams mortgageParams;
   address fulfiller;
   address[] originationPools;
+  uint256[] borrowAmounts;
   address conversionQueue;
   uint256 hintPrevId;
   bool expansion;

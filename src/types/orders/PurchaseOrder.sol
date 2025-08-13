@@ -10,6 +10,7 @@ import {OrderAmounts} from "./OrderAmounts.sol";
  * @notice A struct that represents the intent to purchase the collateral for a mortgage
  * @param originationPools The addresses of the origination pools to deploy funds from
  * @param conversionQueue The address of the conversion queue to use
+ * @param borrowAmounts The amounts being borrowed from each origination pool. Sum must be equal to mortgageParams.amountBorrowed
  * @param orderAmounts The amounts of the order (purchaseAmount, collateralCollected, usdxCollected)
  * @param mortgageParams The parameters for the mortgage being created. Includes the owner, collateral, collateralAmount, subConsol, interestRate, amountBorrowed, and totalPeriods
  * @param timestamp The timestamp of when the PurchaseOrder was created
@@ -20,6 +21,7 @@ import {OrderAmounts} from "./OrderAmounts.sol";
  */
 struct PurchaseOrder {
   address[] originationPools;
+  uint256[] borrowAmounts;
   address conversionQueue;
   OrderAmounts orderAmounts;
   MortgageParams mortgageParams;

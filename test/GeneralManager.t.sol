@@ -442,6 +442,18 @@ contract GeneralManagerTest is BaseTest {
     generalManager.requestMortgageCreation(creationRequest);
   }
 
+  function test_requestMortgageCreation_shouldRevertIfOriginationPoolsEmpty(
+    CreationRequest memory createRequestSeed
+  ) public {
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.originationPools = new address[](0);
+
+    // Attempt to request a mortgage with an empty origination pools array
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.EmptyOriginationPools.selector));
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
   function test_requestMortgageCreation_shouldRevertIfOriginationPoolNotRegistered(
     CreationRequest memory createRequestSeed,
     address unregisteredOriginationPool
@@ -850,6 +862,19 @@ contract GeneralManagerTest is BaseTest {
 
   // ToDo: test_requestMortgageCreation_compoundingWithoutPaymentPlan
   // ToDo: test_requestMortgageCreation_nonCompoundingWithoutPaymentPlan
+
+  function test_originate_compoundingShouldRevertIfOriginationPoolsEmpty(
+    OriginationParameters memory originationParameters
+  ) public {
+    // Set the originationPools to an empty array
+    originationParameters.originationPools = new address[](0);
+
+    // Attempt to originate a mortgage with an empty origination pools array
+    vm.startPrank(address(orderPool));
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.EmptyOriginationPools.selector));
+    generalManager.originate(originationParameters);
+    vm.stopPrank();
+  }
 
   function test_originate_compoundingShouldRevertIfOriginationPoolNotRegistered(
     CreationRequest memory createRequestSeed,
@@ -1674,6 +1699,36 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
   }
 
+  function test_requestBalanceSheetExpansion_shouldRevertIfOriginationPoolsEmpty(
+    ExpansionRequest memory expansionRequestSeed
+  ) public {
+    // Fuzz the expansion request with an empty origination pools array
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.base.originationPools = new address[](0);
+
+    // Mock the loan manager to return a blank mortgage position (with matching total periods)
+    MortgagePosition memory mortgagePosition;
+    mortgagePosition.totalPeriods = expansionRequest.base.totalPeriods;
+    vm.mockCall(
+      address(loanManager),
+      abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
+      abi.encode(mortgagePosition)
+    );
+
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
+    );
+
+    // Attempt to request a balance sheet expansion with an empty origination pools array
+    vm.startPrank(balanceSheetExpander);
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.EmptyOriginationPools.selector));
+    generalManager.requestBalanceSheetExpansion(expansionRequest);
+    vm.stopPrank();
+  }
+
   function test_requestBalanceSheetExpansion_shouldRevertIfOriginationPoolNotRegistered(
     ExpansionRequest memory expansionRequestSeed,
     address unregisteredOriginationPool
@@ -2300,6 +2355,7 @@ contract GeneralManagerTest is BaseTest {
       mortgageParams: purchaseOrder.mortgageParams,
       fulfiller: fulfiller,
       originationPools: purchaseOrder.originationPools,
+      borrowAmounts: purchaseOrder.borrowAmounts,
       conversionQueue: purchaseOrder.conversionQueue,
       hintPrevId: 0,
       expansion: purchaseOrder.expansion,

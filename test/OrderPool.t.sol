@@ -137,9 +137,11 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
     originationPools[0] = address(originationPool);
     orderPool.sendOrder(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
   }
@@ -167,12 +169,14 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Attempt to send an order from the general manager without sufficient gas
     vm.startPrank(address(generalManager));
     vm.expectRevert(abi.encodeWithSelector(IOrderPoolErrors.InsufficientGasFee.selector, gasFee, gasValue));
     orderPool.sendOrder{value: gasValue}(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
   }
@@ -198,12 +202,14 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Attempt to send an order from the general manager without sufficient gas
     vm.startPrank(address(generalManager));
     vm.expectRevert(abi.encodeWithSelector(IOrderPoolErrors.AlreadyExpired.selector, expiration, block.timestamp));
     orderPool.sendOrder{value: orderPoolGasFee}(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
   }
@@ -237,6 +243,8 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Attempt to send an order from the general manager without sufficient gas
     vm.startPrank(address(generalManager));
@@ -246,7 +254,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
       )
     );
     orderPool.sendOrder{value: orderPoolGasFee}(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
   }
@@ -292,10 +300,13 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Generate the expected PurchaseOrder struct
     PurchaseOrder memory expectedPurchaseOrder = PurchaseOrder({
       originationPools: originationPools,
+      borrowAmounts: borrowAmounts,
       conversionQueue: address(conversionQueue),
       orderAmounts: orderAmounts,
       mortgageParams: mortgageParams,
@@ -313,7 +324,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
       0, borrower, originationPools, address(wbtc), expectedPurchaseOrder
     );
     orderPool.sendOrder{value: orderPoolGasFee}(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
 
@@ -384,10 +395,13 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Generate the expected PurchaseOrder struct
     PurchaseOrder memory expectedPurchaseOrder = PurchaseOrder({
       originationPools: originationPools,
+      borrowAmounts: borrowAmounts,
       conversionQueue: address(conversionQueue),
       orderAmounts: orderAmounts,
       mortgageParams: mortgageParams,
@@ -405,7 +419,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
       0, borrower, originationPools, address(wbtc), expectedPurchaseOrder
     );
     orderPool.sendOrder{value: orderPoolGasFee}(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
 
@@ -507,11 +521,13 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
     orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(
-      originationPools, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
+      originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
     vm.stopPrank();
 
@@ -647,11 +663,14 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
 
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
     orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(
       originationPools,
+      borrowAmounts,
       address(conversionQueue),
       orderAmounts,
       mortgageParams,
@@ -789,11 +808,14 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Set up the origination pools array
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
-
+    uint256[] memory borrowAmounts = new uint256[](1);
+    borrowAmounts[0] = mortgageParams.amountBorrowed;
+    
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
     orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(
       originationPools,
+      borrowAmounts,
       address(conversionQueue),
       orderAmounts,
       mortgageParams,

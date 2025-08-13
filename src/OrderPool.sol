@@ -111,6 +111,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
    */
   function sendOrder(
     address[] memory originationPools,
+    uint256[] memory borrowAmounts,
     address conversionQueue,
     OrderAmounts memory orderAmounts,
     MortgageParams memory mortgageParams,
@@ -138,6 +139,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     // Add the PurchaseOrder to the orders mapping
     _orders[index] = PurchaseOrder({
       originationPools: originationPools,
+      borrowAmounts: borrowAmounts,
       conversionQueue: conversionQueue,
       orderAmounts: orderAmounts,
       mortgageParams: mortgageParams,
@@ -212,6 +214,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
           mortgageParams: order.mortgageParams,
           fulfiller: _msgSender(),
           originationPools: order.originationPools,
+          borrowAmounts: order.borrowAmounts,
           conversionQueue: order.conversionQueue,
           hintPrevId: hintPrevId,
           expansion: order.expansion,
