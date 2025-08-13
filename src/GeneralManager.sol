@@ -317,6 +317,27 @@ contract GeneralManager is
   }
 
   /**
+   * @dev Validates that the origination pools are supported
+   * @param originationPools The origination pools
+   */
+  function _validateOriginationPools(address[] memory originationPools) internal view {
+    // Fetch storage
+    GeneralManagerStorage storage $ = _getGeneralManagerStorage();
+
+    // Validate that the origination pools array is not empty
+    if (originationPools.length == 0) {
+      revert EmptyOriginationPools();
+    }
+
+    // Validate that the origination pools used are registered
+    for (uint256 i = 0; i < originationPools.length; i++) {
+      if (!IOriginationPoolScheduler($._originationPoolScheduler).isRegistered(originationPools[i])) {
+        revert InvalidOriginationPool(originationPools[i]);
+      }
+    }
+  }
+
+  /**
    * @inheritdoc IERC165
    */
   function supportsInterface(bytes4 interfaceId)
@@ -603,6 +624,7 @@ contract GeneralManager is
    * @param hasPaymentPlan Whether the mortgage has a payment plan
    * @return mortgageParams The mortgage parameters
    * @return orderAmounts The order amounts
+   * @return borrowAmounts The amounts being borrowed from each origination pool
    */
   function _prepareOrder(
     uint256 tokenId,
@@ -610,24 +632,39 @@ contract GeneralManager is
     address collateral,
     address subConsol,
     bool hasPaymentPlan
-  ) internal view returns (MortgageParams memory mortgageParams, OrderAmounts memory orderAmounts) {
+  )
+    internal
+    view
+    returns (MortgageParams memory mortgageParams, OrderAmounts memory orderAmounts, uint256[] memory borrowAmounts)
+  {
+    borrowAmounts = new uint256[](baseRequest.originationPools.length);
     if (baseRequest.isCompounding) {
-      // If compounding, need to collect 1/2 of the collateral amount + commission fee (this is in the form of collateral)
-      orderAmounts.collateralCollected =
-        IOriginationPool(baseRequest.originationPool).calculateReturnAmount((baseRequest.collateralAmount + 1) / 2);
-      (mortgageParams.amountBorrowed, mortgageParams.collateralDecimals) =
-        _calculateCost(collateral, baseRequest.collateralAmount / 2);
-      orderAmounts.purchaseAmount = (2 * mortgageParams.amountBorrowed)
-        - IOriginationPool(baseRequest.originationPool).calculateReturnAmount(mortgageParams.amountBorrowed);
+      for (uint256 i = 0; i < baseRequest.originationPools.length; i++) {
+        // If compounding, need to collect 1/2 of the collateral amount + commission fee (this is in the form of collateral)
+        orderAmounts.collateralCollected += IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(
+          (baseRequest.collateralAmounts[i] + 1) / 2
+        );
+        (uint256 _cost, uint8 _collateralDecimals) = _calculateCost(collateral, baseRequest.collateralAmounts[i] / 2);
+        borrowAmounts[i] = _cost;
+        mortgageParams.amountBorrowed += _cost;
+        mortgageParams.collateralDecimals = _collateralDecimals;
+        orderAmounts.purchaseAmount +=
+          (2 * _cost) - IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost);
+        mortgageParams.collateralAmount += baseRequest.collateralAmounts[i];
+      }
     } else {
-      // If non-compounding, need to collect the full amountBorrowed in USDX + commission fee
-      (orderAmounts.purchaseAmount, mortgageParams.collateralDecimals) =
-        _calculateCost(collateral, baseRequest.collateralAmount);
-      mortgageParams.amountBorrowed = orderAmounts.purchaseAmount / 2;
-      orderAmounts.usdxCollected =
-        IOriginationPool(baseRequest.originationPool).calculateReturnAmount(mortgageParams.amountBorrowed);
-      if (orderAmounts.purchaseAmount % 2 == 1) {
-        orderAmounts.usdxCollected += 1;
+      for (uint256 i = 0; i < baseRequest.originationPools.length; i++) {
+        // If non-compounding, need to collect the full amountBorrowed in USDX + commission fee
+        (uint256 _cost, uint8 _collateralDecimals) = _calculateCost(collateral, baseRequest.collateralAmounts[i]);
+        orderAmounts.purchaseAmount += _cost;
+        mortgageParams.collateralDecimals = _collateralDecimals;
+        borrowAmounts[i] = _cost / 2;
+        mortgageParams.amountBorrowed += _cost / 2;
+        orderAmounts.usdxCollected += IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost / 2);
+        if (_cost % 2 == 1) {
+          orderAmounts.usdxCollected += 1;
+        }
+        mortgageParams.collateralAmount += baseRequest.collateralAmounts[i];
       }
     }
 
@@ -636,13 +673,56 @@ contract GeneralManager is
       tokenId: tokenId,
       collateral: collateral,
       collateralDecimals: mortgageParams.collateralDecimals,
-      collateralAmount: baseRequest.collateralAmount,
+      collateralAmount: mortgageParams.collateralAmount,
       subConsol: subConsol,
       interestRate: interestRate(collateral, baseRequest.totalPeriods, hasPaymentPlan),
       amountBorrowed: mortgageParams.amountBorrowed,
       totalPeriods: baseRequest.totalPeriods,
       hasPaymentPlan: hasPaymentPlan
     });
+  }
+
+  /**
+   * @dev Sends completed order to the order pool
+   * @param borrowAmounts The amounts being borrowed from each origination pool
+   * @param mortgageParams The mortgage parameters
+   * @param orderAmounts The order amounts
+   * @param baseRequest The base request for the mortgage
+   * @param expansion Whether the request is a new mortgage creation or a balance sheet expansion
+   */
+  function _sendOrder(
+    uint256[] memory borrowAmounts,
+    MortgageParams memory mortgageParams,
+    OrderAmounts memory orderAmounts,
+    BaseRequest calldata baseRequest,
+    bool expansion
+  ) internal {
+    // Fetch storage
+    GeneralManagerStorage storage $ = _getGeneralManagerStorage();
+
+    // Validate that the amount being borrowed is within the minimum and maximum caps for the collateral
+    _validateBorrowCaps(mortgageParams);
+
+    // Collect any collateral (from compounding requests)
+    if (orderAmounts.collateralCollected > 0) {
+      IERC20(mortgageParams.collateral).safeTransferFrom(_msgSender(), $._orderPool, orderAmounts.collateralCollected);
+    }
+
+    // Collect any USDX from (non-compounding requests)
+    if (orderAmounts.usdxCollected > 0) {
+      IERC20($._usdx).safeTransferFrom(_msgSender(), $._orderPool, orderAmounts.usdxCollected);
+    }
+
+    // Send the order to the order pool
+    IOrderPool($._orderPool).sendOrder{value: _calculateRequiredGasFee(true, baseRequest.conversionQueue)}(
+      baseRequest.originationPools,
+      borrowAmounts,
+      baseRequest.conversionQueue,
+      orderAmounts,
+      mortgageParams,
+      baseRequest.expiration,
+      expansion
+    );
   }
 
   /**
@@ -665,10 +745,8 @@ contract GeneralManager is
     // Fetch storage
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
-    // Validate that the origination pool used was registered
-    if (!IOriginationPoolScheduler($._originationPoolScheduler).isRegistered(baseRequest.originationPool)) {
-      revert InvalidOriginationPool(baseRequest.originationPool);
-    }
+    // Validate that the origination pools used are registered
+    _validateOriginationPools(baseRequest.originationPools);
 
     // Validate that the conversion queue is registered
     if (baseRequest.conversionQueue != address(0) && !hasRole(Roles.CONVERSION_ROLE, baseRequest.conversionQueue)) {
@@ -681,31 +759,11 @@ contract GeneralManager is
     }
 
     // Prepare the mortgage params and order amounts
-    (MortgageParams memory mortgageParams, OrderAmounts memory orderAmounts) =
+    (MortgageParams memory mortgageParams, OrderAmounts memory orderAmounts, uint256[] memory borrowAmounts) =
       _prepareOrder(tokenId, baseRequest, collateral, subConsol, hasPaymentPlan);
 
-    // Validate that the amount being borrowed is within the minimum and maximum caps for the collateral
-    _validateBorrowCaps(mortgageParams);
-
-    // Collect any collateral (from compounding requests)
-    if (orderAmounts.collateralCollected > 0) {
-      IERC20(collateral).safeTransferFrom(_msgSender(), $._orderPool, orderAmounts.collateralCollected);
-    }
-
-    // Collect any USDX from (non-compounding requests)
-    if (orderAmounts.usdxCollected > 0) {
-      IERC20($._usdx).safeTransferFrom(_msgSender(), $._orderPool, orderAmounts.usdxCollected);
-    }
-
     // Send the order to the order pool
-    IOrderPool($._orderPool).sendOrder{value: _calculateRequiredGasFee(true, baseRequest.conversionQueue)}(
-      baseRequest.originationPool,
-      baseRequest.conversionQueue,
-      orderAmounts,
-      mortgageParams,
-      baseRequest.expiration,
-      expansion
-    );
+    _sendOrder(borrowAmounts, mortgageParams, orderAmounts, baseRequest, expansion);
   }
 
   /**
@@ -786,9 +844,7 @@ contract GeneralManager is
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
     // Validate that the origination pool used was registered
-    if (!IOriginationPoolScheduler($._originationPoolScheduler).isRegistered(originationParameters.originationPool)) {
-      revert InvalidOriginationPool(originationParameters.originationPool);
-    }
+    _validateOriginationPools(originationParameters.originationPools);
 
     // Validate that the total periods is supported
     if (
@@ -806,8 +862,8 @@ contract GeneralManager is
 
     // Call deploy on the origination pool with the amount of USDX to deploy from it
     // After this call, the origination pool will flash lend `deployAmount` to the GeneralManager and call `originationPoolDeployCallback`
-    IOriginationPool(originationParameters.originationPool).deploy(
-      originationParameters.mortgageParams.amountBorrowed, abi.encode(originationParameters)
+    IOriginationPool(originationParameters.originationPools[0]).deploy(
+      originationParameters.borrowAmounts[0], abi.encode(originationParameters, 0)
     );
 
     // Send purchaseAmount of USDX to the fulfiller
@@ -828,45 +884,54 @@ contract GeneralManager is
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
     // Decode the callback data
-    OriginationParameters memory originationParameters = abi.decode(data, (OriginationParameters));
+    (OriginationParameters memory originationParameters, uint256 index) =
+      abi.decode(data, (OriginationParameters, uint256));
 
-    // Send in the collateral from to the LoanManager before creating the origination pool
-    IERC20(originationParameters.mortgageParams.collateral).safeTransfer(
-      address(ILoanManager($._loanManager)), originationParameters.mortgageParams.collateralAmount
-    );
-
-    if (originationParameters.expansion) {
-      // Expand the balance sheet of an existing mortgage position
-      ILoanManager($._loanManager).expandBalanceSheet(
-        originationParameters.mortgageParams.tokenId,
-        originationParameters.mortgageParams.amountBorrowed,
-        originationParameters.mortgageParams.collateralAmount,
-        originationParameters.mortgageParams.interestRate
+    // If there are more origination pools in the array, call deploy on the next one to flash lend the remaining amount of USDX
+    // If this is the last originationPool in the array, stop and continue with the origination
+    if (index < originationParameters.originationPools.length - 1) {
+      IOriginationPool(originationParameters.originationPools[index + 1]).deploy(
+        originationParameters.borrowAmounts[index + 1], abi.encode(originationParameters, index + 1)
       );
     } else {
-      // Create a new mortgage position
-      ILoanManager($._loanManager).createMortgage(
-        originationParameters.mortgageParams.owner,
-        originationParameters.mortgageParams.tokenId,
-        originationParameters.mortgageParams.collateral,
-        originationParameters.mortgageParams.collateralDecimals,
-        originationParameters.mortgageParams.collateralAmount,
-        originationParameters.mortgageParams.subConsol,
-        originationParameters.mortgageParams.interestRate,
-        originationParameters.mortgageParams.amountBorrowed,
-        originationParameters.mortgageParams.totalPeriods,
-        originationParameters.mortgageParams.hasPaymentPlan
+      // Send in the collateral from to the LoanManager before creating the origination pool
+      IERC20(originationParameters.mortgageParams.collateral).safeTransfer(
+        address(ILoanManager($._loanManager)), originationParameters.mortgageParams.collateralAmount
       );
-    }
 
-    // Enqueue the mortgage position into the conversion queue
-    if (originationParameters.conversionQueue != address(0)) {
-      _enqueueMortgage(
-        originationParameters.mortgageParams.tokenId,
-        originationParameters.conversionQueue,
-        originationParameters.hintPrevId,
-        originationParameters.expansion
-      );
+      if (originationParameters.expansion) {
+        // Expand the balance sheet of an existing mortgage position
+        ILoanManager($._loanManager).expandBalanceSheet(
+          originationParameters.mortgageParams.tokenId,
+          originationParameters.mortgageParams.amountBorrowed,
+          originationParameters.mortgageParams.collateralAmount,
+          originationParameters.mortgageParams.interestRate
+        );
+      } else {
+        // Create a new mortgage position
+        ILoanManager($._loanManager).createMortgage(
+          originationParameters.mortgageParams.owner,
+          originationParameters.mortgageParams.tokenId,
+          originationParameters.mortgageParams.collateral,
+          originationParameters.mortgageParams.collateralDecimals,
+          originationParameters.mortgageParams.collateralAmount,
+          originationParameters.mortgageParams.subConsol,
+          originationParameters.mortgageParams.interestRate,
+          originationParameters.mortgageParams.amountBorrowed,
+          originationParameters.mortgageParams.totalPeriods,
+          originationParameters.mortgageParams.hasPaymentPlan
+        );
+      }
+
+      // Enqueue the mortgage position into the conversion queue
+      if (originationParameters.conversionQueue != address(0)) {
+        _enqueueMortgage(
+          originationParameters.mortgageParams.tokenId,
+          originationParameters.conversionQueue,
+          originationParameters.hintPrevId,
+          originationParameters.expansion
+        );
+      }
     }
 
     // Deposit `returnAmount - amount` of USDX into Consol to pay the originationFee

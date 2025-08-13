@@ -50,9 +50,12 @@ contract GeneralManagerTest is BaseTest {
     view
     returns (CreationRequest memory)
   {
-    createRequestSeed.base.collateralAmount = bound(createRequestSeed.base.collateralAmount, 1, type(uint128).max);
+    createRequestSeed.base.collateralAmounts = new uint256[](1);
+    createRequestSeed.base.collateralAmounts[0] =
+      bound(createRequestSeed.base.collateralAmounts[0], 1, type(uint128).max);
     createRequestSeed.base.totalPeriods = DEFAULT_MORTGAGE_PERIODS;
-    createRequestSeed.base.originationPool = address(originationPool);
+    createRequestSeed.base.originationPools = new address[](1);
+    createRequestSeed.base.originationPools[0] = address(originationPool);
     createRequestSeed.base.conversionQueue = address(conversionQueue);
     createRequestSeed.base.expiration = uint32(
       bound(createRequestSeed.base.expiration, block.timestamp, block.timestamp + orderPool.maximumOrderDuration())
@@ -73,9 +76,12 @@ contract GeneralManagerTest is BaseTest {
     view
     returns (ExpansionRequest memory)
   {
-    expansionRequestSeed.base.collateralAmount = bound(expansionRequestSeed.base.collateralAmount, 1, type(uint128).max);
+    expansionRequestSeed.base.collateralAmounts = new uint256[](1);
+    expansionRequestSeed.base.collateralAmounts[0] =
+      bound(expansionRequestSeed.base.collateralAmounts[0], 1, type(uint128).max);
     expansionRequestSeed.base.totalPeriods = DEFAULT_MORTGAGE_PERIODS;
-    expansionRequestSeed.base.originationPool = address(originationPool);
+    expansionRequestSeed.base.originationPools = new address[](1);
+    expansionRequestSeed.base.originationPools[0] = address(originationPool);
     expansionRequestSeed.base.conversionQueue = address(conversionQueue);
     expansionRequestSeed.base.expiration = uint32(
       bound(expansionRequestSeed.base.expiration, block.timestamp, block.timestamp + orderPool.maximumOrderDuration())
@@ -439,6 +445,18 @@ contract GeneralManagerTest is BaseTest {
     generalManager.requestMortgageCreation(creationRequest);
   }
 
+  function test_requestMortgageCreation_shouldRevertIfOriginationPoolsEmpty(CreationRequest memory createRequestSeed)
+    public
+  {
+    // Fuzz the create request
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationRequest.base.originationPools = new address[](0);
+
+    // Attempt to request a mortgage with an empty origination pools array
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.EmptyOriginationPools.selector));
+    generalManager.requestMortgageCreation(creationRequest);
+  }
+
   function test_requestMortgageCreation_shouldRevertIfOriginationPoolNotRegistered(
     CreationRequest memory createRequestSeed,
     address unregisteredOriginationPool
@@ -448,7 +466,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
-    creationRequest.base.originationPool = unregisteredOriginationPool;
+    creationRequest.base.originationPools = new address[](1);
+    creationRequest.base.originationPools[0] = unregisteredOriginationPool;
 
     // Attempt to request a mortgage with an unregistered origination pool
     vm.expectRevert(
@@ -562,9 +581,10 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Ensure the amount borrowed is less than the minimum cap
     vm.assume(amountBorrowed < minimumCap);
@@ -586,10 +606,13 @@ contract GeneralManagerTest is BaseTest {
 
   function test_requestMortgageCreation_revertsIfAmountBorrowedIsMoreThanMaximumCap(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint128 maximumCap
   ) public {
     // Fuzz the create request (assume compounding and payment plan for simplicity)
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.isCompounding = true;
     creationRequest.hasPaymentPlan = true;
 
@@ -602,9 +625,10 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Ensure the amount borrowed is more than the maximum cap
     vm.assume(amountBorrowed > maximumCap);
@@ -661,9 +685,10 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 purchaseAmount =
       amountBorrowed * 2 - Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
 
@@ -680,9 +705,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Validate that the order was enqueued in the order pool
     assertEq(
-      orderPool.orders(0).originationPool,
+      orderPool.orders(0).originationPools[0],
       address(originationPool),
-      "Origination pool should be the correct origination pool"
+      "originationPools[0] should be the correct origination pool"
     );
     assertEq(
       orderPool.orders(0).orderAmounts.collateralCollected,
@@ -701,8 +726,8 @@ contract GeneralManagerTest is BaseTest {
     );
     assertEq(
       orderPool.orders(0).mortgageParams.collateralAmount,
-      creationRequest.base.collateralAmount,
-      "Collateral amount should be the correct collateral amount"
+      creationRequest.base.collateralAmounts[0],
+      "collateralAmounts[0] should be the correct collateral amount"
     );
     assertEq(
       orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
@@ -768,7 +793,7 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required usdx deposit amount
-    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmounts[0], 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 amountBorrowed = purchaseAmount / 2;
     uint256 requiredUsdxAmount = Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
     if (purchaseAmount % 2 == 1) {
@@ -788,9 +813,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Validate that the order was enqueued in the order pool
     assertEq(
-      orderPool.orders(0).originationPool,
+      orderPool.orders(0).originationPools[0],
       address(originationPool),
-      "Origination pool should be the correct origination pool"
+      "originationPools[0] should be the correct origination pool"
     );
     assertEq(
       orderPool.orders(0).orderAmounts.purchaseAmount,
@@ -809,8 +834,8 @@ contract GeneralManagerTest is BaseTest {
     );
     assertEq(
       orderPool.orders(0).mortgageParams.collateralAmount,
-      creationRequest.base.collateralAmount,
-      "Collateral amount should be the correct collateral amount"
+      creationRequest.base.collateralAmounts[0],
+      "collateralAmounts[0] should be the correct collateral amount"
     );
     assertEq(
       orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
@@ -844,8 +869,22 @@ contract GeneralManagerTest is BaseTest {
   // ToDo: test_requestMortgageCreation_compoundingWithoutPaymentPlan
   // ToDo: test_requestMortgageCreation_nonCompoundingWithoutPaymentPlan
 
+  function test_originate_compoundingShouldRevertIfOriginationPoolsEmpty(
+    OriginationParameters memory originationParameters
+  ) public {
+    // Set the originationPools to an empty array
+    originationParameters.originationPools = new address[](0);
+
+    // Attempt to originate a mortgage with an empty origination pools array
+    vm.startPrank(address(orderPool));
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.EmptyOriginationPools.selector));
+    generalManager.originate(originationParameters);
+    vm.stopPrank();
+  }
+
   function test_originate_compoundingShouldRevertIfOriginationPoolNotRegistered(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 expiration,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee
@@ -859,6 +898,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
     creationRequest.base.isCompounding = true;
 
@@ -879,9 +920,11 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e18);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed =
+      Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e18);
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -912,9 +955,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -938,6 +981,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_originate_compoundingWithoutPaymentPlanShouldRevertIfInvalidTotalPeriods(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 expiration,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee
@@ -954,6 +998,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
     creationRequest.base.isCompounding = true;
 
@@ -971,9 +1017,11 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e18);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed =
+      Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e18);
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -1004,9 +1052,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -1032,6 +1080,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_originate_revertsIfAmountBorrowedIsLessThanMinimumCap(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 expiration,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee,
@@ -1049,6 +1098,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
     creationRequest.base.isCompounding = true;
     creationRequest.hasPaymentPlan = true;
@@ -1067,9 +1118,10 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -1100,9 +1152,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -1129,6 +1181,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_originate_revertsIfAmountBorrowedIsMoreThanMaximumCap(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 expiration,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee,
@@ -1146,6 +1199,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
     creationRequest.base.isCompounding = true;
     creationRequest.hasPaymentPlan = true;
@@ -1164,9 +1219,10 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -1197,9 +1253,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -1228,6 +1284,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_originate_compoundingWithPaymentPlanCreation(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 expiration,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee
@@ -1244,6 +1301,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
     creationRequest.base.isCompounding = true;
     creationRequest.hasPaymentPlan = true;
@@ -1262,9 +1321,10 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -1295,9 +1355,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -1322,7 +1382,7 @@ contract GeneralManagerTest is BaseTest {
     // Validate that the collateral was transferred to SubConsol (via loanManager)
     assertEq(
       wbtc.balanceOf(address(subConsol)),
-      creationRequest.base.collateralAmount,
+      creationRequest.base.collateralAmounts[0],
       "Collateral should be transferred to SubConsol"
     );
 
@@ -1347,6 +1407,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_originate_nonCompoundingWithPaymentPlanCreation(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 expiration,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee
@@ -1363,6 +1424,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
     creationRequest.base.isCompounding = false;
     creationRequest.hasPaymentPlan = true;
@@ -1381,7 +1444,7 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required usdx deposit amount
-    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmounts[0], 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 amountBorrowed = purchaseAmount / 2;
     uint256 requiredUsdxAmount = Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
     if (purchaseAmount % 2 == 1) {
@@ -1417,8 +1480,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount);
-    ERC20Mock(address(wbtc)).approve(address(orderPool), creationRequest.base.collateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0]);
+    ERC20Mock(address(wbtc)).approve(address(orderPool), creationRequest.base.collateralAmounts[0]);
     vm.stopPrank();
 
     // Have the fulfiller process the order on the OrderPool
@@ -1442,7 +1505,7 @@ contract GeneralManagerTest is BaseTest {
     // Validate that the collateral was transferred to SubConsol (via loanManager)
     assertEq(
       wbtc.balanceOf(address(subConsol)),
-      creationRequest.base.collateralAmount,
+      creationRequest.base.collateralAmounts[0],
       "Collateral should be transferred to SubConsol"
     );
 
@@ -1505,6 +1568,7 @@ contract GeneralManagerTest is BaseTest {
   function test_convert_compoundingWithPaymentPlan(
     address caller,
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 principalConverting,
     uint256 collateralConversionAmount,
     address receiver
@@ -1519,17 +1583,20 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = originationPool.deployPhaseTimestamp();
     creationRequest.base.isCompounding = true;
     creationRequest.hasPaymentPlan = true;
 
     // Make sure the collateral conversion amount is less than the collateral amount
-    collateralConversionAmount = bound(collateralConversionAmount, 1, creationRequest.base.collateralAmount);
+    collateralConversionAmount = bound(collateralConversionAmount, 1, creationRequest.base.collateralAmounts[0]);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -1560,9 +1627,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -1646,6 +1713,36 @@ contract GeneralManagerTest is BaseTest {
     vm.stopPrank();
   }
 
+  function test_requestBalanceSheetExpansion_shouldRevertIfOriginationPoolsEmpty(
+    ExpansionRequest memory expansionRequestSeed
+  ) public {
+    // Fuzz the expansion request with an empty origination pools array
+    ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionRequest.base.originationPools = new address[](0);
+
+    // Mock the loan manager to return a blank mortgage position (with matching total periods)
+    MortgagePosition memory mortgagePosition;
+    mortgagePosition.totalPeriods = expansionRequest.base.totalPeriods;
+    vm.mockCall(
+      address(loanManager),
+      abi.encodeWithSelector(ILoanManager.getMortgagePosition.selector, expansionRequest.tokenId),
+      abi.encode(mortgagePosition)
+    );
+
+    // Mock the mortgageNFT to return the balanceSheetExpander as the owner of the mortgagePosition
+    vm.mockCall(
+      address(mortgageNFT),
+      abi.encodeWithSelector(IERC721.ownerOf.selector, expansionRequest.tokenId),
+      abi.encode(balanceSheetExpander)
+    );
+
+    // Attempt to request a balance sheet expansion with an empty origination pools array
+    vm.startPrank(balanceSheetExpander);
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.EmptyOriginationPools.selector));
+    generalManager.requestBalanceSheetExpansion(expansionRequest);
+    vm.stopPrank();
+  }
+
   function test_requestBalanceSheetExpansion_shouldRevertIfOriginationPoolNotRegistered(
     ExpansionRequest memory expansionRequestSeed,
     address unregisteredOriginationPool
@@ -1655,7 +1752,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the expansion request
     ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
-    expansionRequest.base.originationPool = unregisteredOriginationPool;
+    expansionRequest.base.originationPools = new address[](1);
+    expansionRequest.base.originationPools[0] = unregisteredOriginationPool;
 
     // Mock the loan manager to return a blank mortgage position (with matching total periods)
     MortgagePosition memory mortgagePosition;
@@ -1803,9 +1901,10 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((expansionRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (expansionRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 purchaseAmount = amountIn * 2 - Math.mulDiv(amountIn, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
 
     // Minting collateral to the balanceSheetExpander and approving the generalManager to spend it
@@ -1839,9 +1938,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Validate that the order was enqueued in the order pool
     assertEq(
-      orderPool.orders(0).originationPool,
+      orderPool.orders(0).originationPools[0],
       address(originationPool),
-      "Origination pool should be the correct origination pool"
+      "originationPools[0] should be the correct origination pool"
     );
     assertEq(
       orderPool.orders(0).orderAmounts.collateralCollected,
@@ -1864,8 +1963,8 @@ contract GeneralManagerTest is BaseTest {
     );
     assertEq(
       orderPool.orders(0).mortgageParams.collateralAmount,
-      expansionRequest.base.collateralAmount,
-      "Collateral amount should be equal to expansionRequest.base.collateralAmount"
+      expansionRequest.base.collateralAmounts[0],
+      "Collateral amount should be equal to expansionRequest.base.collateralAmounts[0]"
     );
     assertEq(
       orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
@@ -1931,7 +2030,7 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required usdx deposit amount
-    uint256 purchaseAmount = Math.mulDiv(expansionRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 purchaseAmount = Math.mulDiv(expansionRequest.base.collateralAmounts[0], 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 amountIn = purchaseAmount / 2;
     uint256 requiredUsdxAmount = Math.mulDiv(amountIn, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
     if (purchaseAmount % 2 == 1) {
@@ -1969,9 +2068,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Validate that the order was enqueued in the order pool
     assertEq(
-      orderPool.orders(0).originationPool,
+      orderPool.orders(0).originationPools[0],
       address(originationPool),
-      "Origination pool should be the correct origination pool"
+      "originationPools[0] should be the correct origination pool"
     );
     assertEq(
       orderPool.orders(0).orderAmounts.purchaseAmount,
@@ -1994,8 +2093,8 @@ contract GeneralManagerTest is BaseTest {
     );
     assertEq(
       orderPool.orders(0).mortgageParams.collateralAmount,
-      expansionRequest.base.collateralAmount,
-      "Collateral amount should be equal to expansionRequest.base.collateralAmount"
+      expansionRequest.base.collateralAmounts[0],
+      "Collateral amount should be equal to expansionRequest.base.collateralAmounts[0]"
     );
     assertEq(
       orderPool.orders(0).mortgageParams.subConsol, address(subConsol), "SubConsol should be the correct subConsol"
@@ -2027,7 +2126,9 @@ contract GeneralManagerTest is BaseTest {
 
   function test_originate_compoundingWithoutPaymentPlanExpansion(
     CreationRequest memory createRequestSeed,
+    uint256 creationCollateralAmount,
     ExpansionRequest memory expansionRequestSeed,
+    uint256 expansionCollateralAmount,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee
   ) public {
@@ -2037,6 +2138,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    creationCollateralAmount = bound(creationCollateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = creationCollateralAmount;
     creationRequest.base.expiration = originationPool.deployPhaseTimestamp();
     creationRequest.base.isCompounding = true;
     creationRequest.hasPaymentPlan = false;
@@ -2055,9 +2158,10 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -2088,9 +2192,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, creationRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), creationRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), creationRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -2108,6 +2212,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the expansion request
     ExpansionRequest memory expansionRequest = fuzzExpansionRequestFromSeed(expansionRequestSeed);
+    expansionCollateralAmount = bound(expansionCollateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    expansionRequest.base.collateralAmounts[0] = expansionCollateralAmount;
     expansionRequest.tokenId = 1; // The tokenId of the first mortgage
     expansionRequest.base.expiration = originationPool.deployPhaseTimestamp();
     expansionRequest.base.isCompounding = true;
@@ -2116,9 +2222,10 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount again but this time for expanding the balance sheet
-    requiredCollateralAmount =
-      Math.mulDiv((expansionRequest.base.collateralAmount + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmount / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    requiredCollateralAmount = Math.mulDiv(
+      (expansionRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountIn is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountIn < originationPool.poolLimit() && amountIn > 1e18);
@@ -2152,9 +2259,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Deal the remaining collateral to the fulfiller and approve the OrderPool to spend it
     vm.startPrank(fulfiller);
-    ERC20Mock(address(wbtc)).mint(fulfiller, expansionRequest.base.collateralAmount - requiredCollateralAmount);
+    ERC20Mock(address(wbtc)).mint(fulfiller, expansionRequest.base.collateralAmounts[0] - requiredCollateralAmount);
     ERC20Mock(address(wbtc)).approve(
-      address(orderPool), expansionRequest.base.collateralAmount - requiredCollateralAmount
+      address(orderPool), expansionRequest.base.collateralAmounts[0] - requiredCollateralAmount
     );
     vm.stopPrank();
 
@@ -2179,7 +2286,7 @@ contract GeneralManagerTest is BaseTest {
     // Validate that the collateral was transferred to SubConsol (via loanManager)
     assertEq(
       wbtc.balanceOf(address(subConsol)),
-      creationRequest.base.collateralAmount + expansionRequest.base.collateralAmount,
+      creationRequest.base.collateralAmounts[0] + expansionRequest.base.collateralAmounts[0],
       "The original and new collateral should be transferred to SubConsol"
     );
 
@@ -2204,6 +2311,7 @@ contract GeneralManagerTest is BaseTest {
 
   function test_enqueueMortgage(
     CreationRequest memory createRequestSeed,
+    uint256 collateralAmount,
     uint256 orderPoolGasFee,
     uint256 mortgageGasFee
   ) public {
@@ -2212,6 +2320,8 @@ contract GeneralManagerTest is BaseTest {
 
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
+    collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
+    creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.isCompounding = false;
     creationRequest.hasPaymentPlan = true;
     creationRequest.base.conversionQueue = address(0);
@@ -2228,7 +2338,7 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required usdx deposit amount
-    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmount, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
+    uint256 purchaseAmount = Math.mulDiv(creationRequest.base.collateralAmounts[0], 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 amountBorrowed = purchaseAmount / 2;
     uint256 requiredUsdxAmount = Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
     if (purchaseAmount % 2 == 1) {
@@ -2261,7 +2371,8 @@ contract GeneralManagerTest is BaseTest {
     OriginationParameters memory originationParameters = OriginationParameters({
       mortgageParams: purchaseOrder.mortgageParams,
       fulfiller: fulfiller,
-      originationPool: purchaseOrder.originationPool,
+      originationPools: purchaseOrder.originationPools,
+      borrowAmounts: purchaseOrder.borrowAmounts,
       conversionQueue: purchaseOrder.conversionQueue,
       hintPrevId: 0,
       expansion: purchaseOrder.expansion,

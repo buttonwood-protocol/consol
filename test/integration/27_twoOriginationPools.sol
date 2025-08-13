@@ -12,60 +12,104 @@ import {MortgagePosition} from "../../src/types/MortgagePosition.sol";
 import {MortgageStatus} from "../../src/types/enums/MortgageStatus.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {MortgageMath} from "../../src/libraries/MortgageMath.sol";
-import {MortgageNode} from "../../src/types/MortgageNode.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
- * @title Integration_21_NoRedeemDequeueTest
+ * @title Integration_27_TwoOriginationPoolsTest
  * @author @SocksNFlops
- * @notice Borrower pays off their mortgage never redeems. ConversionQueue needs to auto-dequeue it.
+ * @notice Borrower creates a mortgage from two origination pools
  */
-contract Integration_21_NoRedeemDequeueTest is IntegrationBaseTest {
+contract Integration_27_TwoOriginationPoolsTest is IntegrationBaseTest {
   using MortgageMath for MortgagePosition;
 
+  address lender1 = makeAddr("lender1");
+  address lender2 = makeAddr("lender2");
+  IOriginationPool originationPool1;
+  IOriginationPool originationPool2;
+
   function integrationTestId() public pure override returns (string memory) {
-    return type(Integration_21_NoRedeemDequeueTest).name;
+    return type(Integration_27_TwoOriginationPoolsTest).name;
   }
 
   function setUp() public virtual override(IntegrationBaseTest) {
     super.setUp();
   }
 
-  function run() public virtual override {
-    // Mint 100k usdt to the lender
-    MockERC20(address(usdt)).mint(address(lender), 100_000e6);
+  function lender1DepositsIntoOgPool1() internal {
+    // Mint 75k usdt to lender1
+    MockERC20(address(usdt)).mint(address(lender1), 75_000e6);
 
-    // Lender deposits the 100k usdt into USDX
-    vm.startPrank(lender);
-    usdt.approve(address(usdx), 100_000e6);
-    usdx.deposit(address(usdt), 100_000e6);
+    // Lender1 deposits the 75k usdt into USDX
+    vm.startPrank(lender1);
+    usdt.approve(address(usdx), 75_000e6);
+    usdx.deposit(address(usdt), 75_000e6);
     vm.stopPrank();
 
-    // Lender deploys the origination pool
-    vm.startPrank(lender);
-    originationPool =
+    // Lender1 deploys originationPool1
+    vm.startPrank(lender1);
+    originationPool1 =
       IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(1)));
     vm.stopPrank();
 
-    // Lender deposits USDX into the origination pool
-    vm.startPrank(lender);
-    usdx.approve(address(originationPool), 100_000e18);
-    originationPool.deposit(100_000e18);
+    // Confirm the originationPool1 has a poolMultiplierBps of 100
+    assertEq(originationPool1.poolMultiplierBps(), 100, "originationPool1.poolMultiplierBps()");
+
+    // Lender1 deposits USDX into originationPool1
+    vm.startPrank(lender1);
+    usdx.approve(address(originationPool1), 75_000e18);
+    originationPool1.deposit(75_000e18);
+    vm.stopPrank();
+  }
+
+  function lender2DepositsIntoOgPool2() internal {
+    // Mint 25k usdt to lender2
+    MockERC20(address(usdt)).mint(address(lender2), 25_000e6);
+
+    // Lender2 deposits the 25k usdt into USDX
+    vm.startPrank(lender2);
+    usdt.approve(address(usdx), 25_000e6);
+    usdx.deposit(address(usdt), 25_000e6);
     vm.stopPrank();
 
-    // Skip time ahead to the deployPhase of the origination pool
-    vm.warp(originationPool.deployPhaseTimestamp());
+    // Lender2 deploys originationPool2
+    vm.startPrank(lender2);
+    originationPool2 =
+      IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(2)));
+    vm.stopPrank();
+
+    // Confirm the originationPool2 has a poolMultiplierBps of 200
+    assertEq(originationPool2.poolMultiplierBps(), 200, "originationPool2.poolMultiplierBps()");
+
+    // Lender2 deposits USDX into originationPool2
+    vm.startPrank(lender2);
+    usdx.approve(address(originationPool2), 25_000e18);
+    originationPool2.deposit(25_000e18);
+    vm.stopPrank();
+  }
+
+  function run() public virtual override {
+    // Lender1 deposits into originationPool1
+    lender1DepositsIntoOgPool1();
+
+    // Lender2 deposits into originationPool2
+    lender2DepositsIntoOgPool2();
+
+    // Skip time ahead to the deployPhase of the origination pools
+    vm.warp(Math.max(originationPool1.deployPhaseTimestamp(), originationPool2.deployPhaseTimestamp()));
 
     // Mint the fulfiller 2 BTC that he is willing to sell for $200k
     MockERC20(address(btc)).mint(address(fulfiller), 2e8);
     btc.approve(address(orderPool), 2e8);
 
-    // Mint 101k usdt to the borrower
-    MockERC20(address(usdt)).mint(address(borrower), 101_000e6);
+    // Total commission paid to origination pools is [(75k * 1%) + (25k * 2%)] / 100k = 1.25%
+    // 100k + 1.25% = 101_250
+    // Mint 101_250 usdt to the borrower
+    MockERC20(address(usdt)).mint(address(borrower), 101_250e6);
 
-    // Borrower deposits the 101k usdt into USDX
+    // Borrower deposits the 101_250 usdt into USDX
     vm.startPrank(borrower);
-    usdt.approve(address(usdx), 101_000e6);
-    usdx.deposit(address(usdt), 101_000e6);
+    usdt.approve(address(usdx), 101_250e6);
+    usdx.deposit(address(usdt), 101_250e6);
     vm.stopPrank();
 
     // Update the interest rate oracle to 7.69%
@@ -76,28 +120,30 @@ contract Integration_21_NoRedeemDequeueTest is IntegrationBaseTest {
     MockPyth(address(pyth)).setPrice(pythPriceIdBTC, 100_000e8, 4349253107, -8, block.timestamp);
     vm.stopPrank();
 
-    // Borrower approves the general manager to take the down payment of 101k usdx
+    // Borrower approves the general manager to take the down payment of 101_250 usdx
     vm.startPrank(borrower);
-    usdx.approve(address(generalManager), 101_000e18);
+    usdx.approve(address(generalManager), 101_250e18);
     vm.stopPrank();
 
-    // Deal 0.01 native tokens to the borrow to pay for the gas fee (orderPool + conversionQueue)
-    vm.deal(address(borrower), 0.02e18);
+    // Deal 0.01 native tokens to the borrow to pay for the gas fee (not enqueuing into a conversion queue)
+    vm.deal(address(borrower), 0.01e18);
 
     // Borrower requests a non-compounding mortgage
     {
-      uint256[] memory collateralAmounts = new uint256[](1);
-      collateralAmounts[0] = 2e8;
-      address[] memory originationPools = new address[](1);
-      originationPools[0] = address(originationPool);
+      uint256[] memory collateralAmounts = new uint256[](2);
+      collateralAmounts[0] = 1.5e8;
+      collateralAmounts[1] = 0.5e8;
+      address[] memory originationPools = new address[](2);
+      originationPools[0] = address(originationPool1);
+      originationPools[1] = address(originationPool2);
       vm.startPrank(borrower);
-      generalManager.requestMortgageCreation{value: 0.02e18}(
+      generalManager.requestMortgageCreation{value: 0.01e18}(
         CreationRequest({
           base: BaseRequest({
             collateralAmounts: collateralAmounts,
             totalPeriods: 36,
             originationPools: originationPools,
-            conversionQueue: address(conversionQueue),
+            conversionQueue: address(0),
             isCompounding: false,
             expiration: block.timestamp
           }),
@@ -110,6 +156,13 @@ contract Integration_21_NoRedeemDequeueTest is IntegrationBaseTest {
       vm.stopPrank();
     }
 
+    // Validate that the borrower has spent 101_250 USDX
+    assertEq(usdx.balanceOf(address(borrower)), 0, "usdx.balanceOf(borrower)");
+
+    // Validate that originationPool1 has 75k USDX and originationPool2 has 25k USDX
+    assertEq(usdx.balanceOf(address(originationPool1)), 75_000e18, "usdx.balanceOf(originationPool1)");
+    assertEq(usdx.balanceOf(address(originationPool2)), 25_000e18, "usdx.balanceOf(originationPool2)");
+
     // Fulfiller approves the order pool to take his 2 btc that he's selling
     vm.startPrank(fulfiller);
     btc.approve(address(orderPool), 2 * 1e8);
@@ -119,6 +172,11 @@ contract Integration_21_NoRedeemDequeueTest is IntegrationBaseTest {
     vm.startPrank(fulfiller);
     orderPool.processOrders(new uint256[](1), new uint256[](1));
     vm.stopPrank();
+
+    // Validate that originationPool1 has 75_750 Consol
+    assertEq(consol.balanceOf(address(originationPool1)), 75_750e18, "consol.balanceOf(originationPool1)");
+    // Validate that originationPool2 has 25_500 Consol
+    assertEq(consol.balanceOf(address(originationPool2)), 25_500e18, "consol.balanceOf(originationPool2)");
 
     // Validate that the borrower has the mortgageNFT
     assertEq(mortgageNFT.ownerOf(1), address(borrower));
@@ -146,45 +204,5 @@ contract Integration_21_NoRedeemDequeueTest is IntegrationBaseTest {
     assertEq(mortgagePosition.totalPeriods, 36, "totalPeriods");
     assertEq(mortgagePosition.hasPaymentPlan, true, "hasPaymentPlan");
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "status");
-
-    // Validate the conversion queue has the mortgagePosition in it
-    assertEq(conversionQueue.mortgageHead(), mortgagePosition.tokenId, "mortgageHead");
-    assertEq(conversionQueue.mortgageTail(), mortgagePosition.tokenId, "mortgageTail");
-    assertEq(conversionQueue.mortgageSize(), 1, "mortgageSize");
-
-    // Validate the mortgageNode fields are correct
-    MortgageNode memory mortgageNode = conversionQueue.mortgageNodes(mortgagePosition.tokenId);
-    assertEq(mortgageNode.previous, 0, "mortgageNode.Previous");
-    assertEq(mortgageNode.next, 0, "mortgageNode.Next");
-    assertEq(mortgageNode.triggerPrice, 150_000e18, "mortgageNode.TriggerPrice");
-    assertEq(mortgageNode.tokenId, mortgagePosition.tokenId, "mortgageNode.TokenId");
-    assertEq(mortgageNode.gasFee, 0.01e18, "mortgageNode.GasFee");
-
-    // Borrower pays off the entire mortgage in one lump sum
-    vm.startPrank(borrower);
-    {
-      uint256 usdxAmount = consol.convertUnderlying(address(usdx), mortgagePosition.termBalance);
-      uint256 usdtAmount = usdx.convertUnderlying(address(usdt), usdxAmount);
-      MockERC20(address(usdt)).mint(address(borrower), usdtAmount);
-      usdt.approve(address(usdx), usdtAmount);
-      usdx.deposit(address(usdt), usdtAmount);
-      usdx.approve(address(consol), usdxAmount);
-      consol.deposit(address(usdx), usdxAmount);
-      consol.approve(address(loanManager), mortgagePosition.termBalance);
-      loanManager.periodPay(mortgagePosition.tokenId, mortgagePosition.termBalance);
-    }
-    vm.stopPrank();
-
-    // Validate the mortgagePosition is paid off
-    mortgagePosition = loanManager.getMortgagePosition(1);
-    assertEq(mortgagePosition.termPaid, mortgagePosition.termBalance, "termPaid == termBalance");
-
-    // Skip time ahead 3 years
-    skip(3 * 365 days);
-
-    // Rando dequeues the mortgage from the conversion queue
-    vm.startPrank(rando);
-    conversionQueue.dequeueMortgage(1);
-    vm.stopPrank();
   }
 }
