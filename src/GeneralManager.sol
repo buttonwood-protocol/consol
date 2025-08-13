@@ -631,17 +631,24 @@ contract GeneralManager is
     address collateral,
     address subConsol,
     bool hasPaymentPlan
-  ) internal view returns (MortgageParams memory mortgageParams, OrderAmounts memory orderAmounts, uint256[] memory borrowAmounts) {
+  )
+    internal
+    view
+    returns (MortgageParams memory mortgageParams, OrderAmounts memory orderAmounts, uint256[] memory borrowAmounts)
+  {
     borrowAmounts = new uint256[](baseRequest.originationPools.length);
     if (baseRequest.isCompounding) {
       for (uint256 i = 0; i < baseRequest.originationPools.length; i++) {
         // If compounding, need to collect 1/2 of the collateral amount + commission fee (this is in the form of collateral)
-        orderAmounts.collateralCollected += IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount((baseRequest.collateralAmounts[i] + 1) / 2);
+        orderAmounts.collateralCollected += IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(
+          (baseRequest.collateralAmounts[i] + 1) / 2
+        );
         (uint256 _cost, uint8 _collateralDecimals) = _calculateCost(collateral, baseRequest.collateralAmounts[i] / 2);
         borrowAmounts[i] = _cost;
         mortgageParams.amountBorrowed += _cost;
         mortgageParams.collateralDecimals = _collateralDecimals;
-        orderAmounts.purchaseAmount += (2 * _cost) - IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost);
+        orderAmounts.purchaseAmount +=
+          (2 * _cost) - IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost);
         mortgageParams.collateralAmount += baseRequest.collateralAmounts[i];
       }
     } else {
@@ -652,7 +659,7 @@ contract GeneralManager is
         mortgageParams.collateralDecimals = _collateralDecimals;
         borrowAmounts[i] = _cost / 2;
         mortgageParams.amountBorrowed += _cost / 2;
-        orderAmounts.usdxCollected += IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost/2);
+        orderAmounts.usdxCollected += IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost / 2);
         if (_cost % 2 == 1) {
           orderAmounts.usdxCollected += 1;
         }
@@ -876,14 +883,15 @@ contract GeneralManager is
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
     // Decode the callback data
-    (OriginationParameters memory originationParameters, uint256 index) = abi.decode(data, (OriginationParameters, uint256));
+    (OriginationParameters memory originationParameters, uint256 index) =
+      abi.decode(data, (OriginationParameters, uint256));
 
     // If there are more origination pools in the array, call deploy on the next one to flash lend the remaining amount of USDX
     // If this is the last originationPool in the array, stop and continue with the origination
     if (index < originationParameters.originationPools.length - 1) {
       IOriginationPool(originationParameters.originationPools[index + 1]).deploy(
-        originationParameters.borrowAmounts[index + 1],
-        abi.encode(originationParameters,index + 1));
+        originationParameters.borrowAmounts[index + 1], abi.encode(originationParameters, index + 1)
+      );
     } else {
       // Send in the collateral from to the LoanManager before creating the origination pool
       IERC20(originationParameters.mortgageParams.collateral).safeTransfer(

@@ -320,9 +320,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
     vm.expectEmit(true, true, true, true);
-    emit IOrderPoolEvents.PurchaseOrderAdded(
-      0, borrower, originationPools, address(wbtc), expectedPurchaseOrder
-    );
+    emit IOrderPoolEvents.PurchaseOrderAdded(0, borrower, originationPools, address(wbtc), expectedPurchaseOrder);
     orderPool.sendOrder{value: orderPoolGasFee}(
       originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
@@ -415,9 +413,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
     vm.expectEmit(true, true, true, true);
-    emit IOrderPoolEvents.PurchaseOrderAdded(
-      0, borrower, originationPools, address(wbtc), expectedPurchaseOrder
-    );
+    emit IOrderPoolEvents.PurchaseOrderAdded(0, borrower, originationPools, address(wbtc), expectedPurchaseOrder);
     orderPool.sendOrder{value: orderPoolGasFee}(
       originationPools, borrowAmounts, address(conversionQueue), orderAmounts, mortgageParams, expiration, expansion
     );
@@ -810,7 +806,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     originationPools[0] = address(originationPool);
     uint256[] memory borrowAmounts = new uint256[](1);
     borrowAmounts[0] = mortgageParams.amountBorrowed;
-    
+
     // Mock the general manager to send the order
     vm.startPrank(address(generalManager));
     orderPool.sendOrder{value: orderPoolGasFee + mortgageGasFee}(

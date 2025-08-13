@@ -131,7 +131,8 @@ contract MockRouter is Context {
       (paymentAmount, collateralDecimals) = IPriceOracle(
         IGeneralManager(generalManager).priceOracles(creationRequest.collateral)
       ).cost(creationRequest.base.collateralAmounts[0]);
-      usdxCollected = IOriginationPool(creationRequest.base.originationPools[0]).calculateReturnAmount(paymentAmount / 2);
+      usdxCollected =
+        IOriginationPool(creationRequest.base.originationPools[0]).calculateReturnAmount(paymentAmount / 2);
       if (paymentAmount % 2 == 1) {
         usdxCollected += 1;
       }

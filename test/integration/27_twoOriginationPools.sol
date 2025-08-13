@@ -47,7 +47,8 @@ contract Integration_27_TwoOriginationPoolsTest is IntegrationBaseTest {
 
     // Lender1 deploys originationPool1
     vm.startPrank(lender1);
-    originationPool1 = IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(1)));
+    originationPool1 =
+      IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(1)));
     vm.stopPrank();
 
     // Confirm the originationPool1 has a poolMultiplierBps of 100
@@ -72,7 +73,8 @@ contract Integration_27_TwoOriginationPoolsTest is IntegrationBaseTest {
 
     // Lender2 deploys originationPool2
     vm.startPrank(lender2);
-    originationPool2 = IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(2)));
+    originationPool2 =
+      IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(2)));
     vm.stopPrank();
 
     // Confirm the originationPool2 has a poolMultiplierBps of 200

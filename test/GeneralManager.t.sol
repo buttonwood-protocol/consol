@@ -51,7 +51,8 @@ contract GeneralManagerTest is BaseTest {
     returns (CreationRequest memory)
   {
     createRequestSeed.base.collateralAmounts = new uint256[](1);
-    createRequestSeed.base.collateralAmounts[0] = bound(createRequestSeed.base.collateralAmounts[0], 1, type(uint128).max);
+    createRequestSeed.base.collateralAmounts[0] =
+      bound(createRequestSeed.base.collateralAmounts[0], 1, type(uint128).max);
     createRequestSeed.base.totalPeriods = DEFAULT_MORTGAGE_PERIODS;
     createRequestSeed.base.originationPools = new address[](1);
     createRequestSeed.base.originationPools[0] = address(originationPool);
@@ -69,13 +70,15 @@ contract GeneralManagerTest is BaseTest {
 
     return createRequestSeed;
   }
+
   function fuzzExpansionRequestFromSeed(ExpansionRequest memory expansionRequestSeed)
     public
     view
     returns (ExpansionRequest memory)
   {
     expansionRequestSeed.base.collateralAmounts = new uint256[](1);
-    expansionRequestSeed.base.collateralAmounts[0] = bound(expansionRequestSeed.base.collateralAmounts[0], 1, type(uint128).max);
+    expansionRequestSeed.base.collateralAmounts[0] =
+      bound(expansionRequestSeed.base.collateralAmounts[0], 1, type(uint128).max);
     expansionRequestSeed.base.totalPeriods = DEFAULT_MORTGAGE_PERIODS;
     expansionRequestSeed.base.originationPools = new address[](1);
     expansionRequestSeed.base.originationPools[0] = address(originationPool);
@@ -442,9 +445,9 @@ contract GeneralManagerTest is BaseTest {
     generalManager.requestMortgageCreation(creationRequest);
   }
 
-  function test_requestMortgageCreation_shouldRevertIfOriginationPoolsEmpty(
-    CreationRequest memory createRequestSeed
-  ) public {
+  function test_requestMortgageCreation_shouldRevertIfOriginationPoolsEmpty(CreationRequest memory createRequestSeed)
+    public
+  {
     // Fuzz the create request
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
     creationRequest.base.originationPools = new address[](0);
@@ -578,8 +581,9 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Ensure the amount borrowed is less than the minimum cap
@@ -621,8 +625,9 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Ensure the amount borrowed is more than the maximum cap
@@ -680,8 +685,9 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 purchaseAmount =
       amountBorrowed * 2 - Math.mulDiv(amountBorrowed, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
@@ -914,9 +920,11 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e18);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed =
+      Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e18);
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -989,7 +997,7 @@ contract GeneralManagerTest is BaseTest {
     orderPoolGasFee = bound(orderPoolGasFee, 0, type(uint256).max - mortgageGasFee);
 
     // Fuzz the create request
-    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);  
+    CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
     collateralAmount = bound(collateralAmount, 1, type(uint128).max); // Needed to help the fuzzer
     creationRequest.base.collateralAmounts[0] = collateralAmount;
     creationRequest.base.expiration = expiration;
@@ -1009,9 +1017,11 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
-    uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e18);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
+    uint256 amountBorrowed =
+      Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e18);
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
     vm.assume(amountBorrowed < originationPool.poolLimit() && amountBorrowed > 1e18);
@@ -1108,8 +1118,9 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
@@ -1208,8 +1219,9 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
@@ -1309,8 +1321,9 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(borrower, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
@@ -1580,8 +1593,9 @@ contract GeneralManagerTest is BaseTest {
     collateralConversionAmount = bound(collateralConversionAmount, 1, creationRequest.base.collateralAmounts[0]);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
@@ -1887,8 +1901,9 @@ contract GeneralManagerTest is BaseTest {
     mockPyth.setPrice(BTC_PRICE_ID, 10753717500000, 4349253107, -8, block.timestamp);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((expansionRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (expansionRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
     uint256 purchaseAmount = amountIn * 2 - Math.mulDiv(amountIn, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
 
@@ -2143,8 +2158,9 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount
-    uint256 requiredCollateralAmount =
-      Math.mulDiv((creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    uint256 requiredCollateralAmount = Math.mulDiv(
+      (creationRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountBorrowed = Math.mulDiv(creationRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountBorrowed is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
@@ -2206,8 +2222,9 @@ contract GeneralManagerTest is BaseTest {
     vm.deal(balanceSheetExpander, orderPoolGasFee + mortgageGasFee);
 
     // Calculating the required collateral deposit amount again but this time for expanding the balance sheet
-    requiredCollateralAmount =
-      Math.mulDiv((expansionRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4);
+    requiredCollateralAmount = Math.mulDiv(
+      (expansionRequest.base.collateralAmounts[0] + 1) / 2, 1e4 + originationPoolConfig.poolMultiplierBps, 1e4
+    );
     uint256 amountIn = Math.mulDiv(expansionRequest.base.collateralAmounts[0] / 2, 107537_175000000_000000000, 1e8); // 1e8 since BTC has 8 decimals
 
     // Make sure that the amountIn is less than the pool limit but more than the minimum lend amount (from the origination pool's deposit minimum)
