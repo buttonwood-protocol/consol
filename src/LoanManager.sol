@@ -26,7 +26,7 @@ import {Constants} from "./libraries/Constants.sol";
  * @dev In order to minimize smart contract risk, we are hedging towards immutability.
  */
 contract LoanManager is ILoanManager, ERC165, Context {
-  using SafeERC20 for IConsol;
+  using SafeERC20 for IERC20;
   using MortgageMath for MortgagePosition;
 
   // Storage variables
@@ -208,7 +208,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
    * @param amount The amount of Consol to transfer
    */
   function _consolTransferFrom(address from, address to, uint256 amount) internal {
-    IConsol(consol).safeTransferFrom(from, to, amount);
+    IERC20(consol).safeTransferFrom(from, to, amount);
   }
 
   /**
@@ -242,7 +242,17 @@ contract LoanManager is ILoanManager, ERC165, Context {
     // Send all minted Consol to the general manager
     uint256 balance = IConsol(consol).balanceOf(address(this));
     if (balance > 0) {
-      IConsol(consol).safeTransfer(generalManager, balance);
+      IERC20(consol).safeTransfer(generalManager, balance);
+    }
+  }
+
+  function _forfeitConsol() internal {
+    IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
+  }
+
+  function _validateMinimumAmountBorrowed(uint256 amountBorrowed) internal pure {
+    if (amountBorrowed < Constants.MINIMUM_AMOUNT_BORROWED) {
+      revert AmountBorrowedBelowMinimum(amountBorrowed, Constants.MINIMUM_AMOUNT_BORROWED);
     }
   }
 
@@ -258,9 +268,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
    */
   function createMortgage(MortgageParams memory mortgageParams) external override onlyGeneralManager {
     // Validate that the amount borrowed is above a minimum threshold
-    if (mortgageParams.amountBorrowed < Constants.MINIMUM_AMOUNT_BORROWED) {
-      revert AmountBorrowedBelowMinimum(mortgageParams.amountBorrowed, Constants.MINIMUM_AMOUNT_BORROWED);
-    }
+    _validateMinimumAmountBorrowed(mortgageParams.amountBorrowed);
 
     // Create a new mortgage position
     mortgagePositions[mortgageParams.tokenId] = MortgageMath.createNewMortgagePosition(
@@ -327,7 +335,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     _withdrawSubConsol(mortgagePositions[tokenId].subConsol, principalPayment);
 
     // Burn the surplus tokens accumulated in the loan manager (this represents interest getting redistributed to existing Consol holders)
-    IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
+    _forfeitConsol();
 
     // Emit a period pay event
     emit PeriodPay(tokenId, amount - refund, mortgagePositions[tokenId].periodsPaid());
@@ -350,7 +358,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     _consolTransferFrom(_msgSender(), address(this), amount - refund);
 
     // Forfeit the tokens in the Consol contract (distributed as interest to Consol holders)
-    IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
+    _forfeitConsol();
 
     // Emit a penalty pay event
     emit PenaltyPay(tokenId, amount - refund);
@@ -458,8 +466,8 @@ contract LoanManager is ILoanManager, ERC165, Context {
    */
   function flashSwapCallback(address inputToken, address outputToken, uint256 amount, bytes calldata data) external {
     // Validate that the caller is the Consol contract
-    if (_msgSender() != address(consol)) {
-      revert OnlyConsol(_msgSender(), address(consol));
+    if (_msgSender() != consol) {
+      revert OnlyConsol(_msgSender(), consol);
     }
 
     // Decode the callback data
@@ -493,7 +501,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
       }
 
       // Transfer the forfeited assets pool tokens directly to the Consol contract
-      IERC20(forfeitedAssetsPool).transfer(address(consol), amount);
+      IERC20(forfeitedAssetsPool).safeTransfer(consol, amount);
     }
   }
 
@@ -537,9 +545,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     onlyGeneralManager
   {
     // Validate that amountIn (the new amount being borrowed) is above a minimum threshold
-    if (amountIn < Constants.MINIMUM_AMOUNT_BORROWED) {
-      revert AmountBorrowedBelowMinimum(amountIn, Constants.MINIMUM_AMOUNT_BORROWED);
-    }
+    _validateMinimumAmountBorrowed(amountIn);
 
     // Update the mortgage position to be expanded
     mortgagePositions[tokenId] =

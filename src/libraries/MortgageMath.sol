@@ -547,6 +547,23 @@ library MortgageMath {
     return mortgagePosition;
   }
 
+  function _refinanceHelper(MortgagePosition memory mortgagePosition, uint256 principalIn, uint16 newInterestRate, uint8 newTotalPeriods) private view returns (MortgagePosition memory) {
+    uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
+    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(
+      mortgagePosition.termPaid + mortgagePosition.termConverted
+    ) - principalPaid;
+    mortgagePosition.termBalance =
+      calculateTermBalance(mortgagePosition.principalRemaining() + principalIn, newInterestRate, newTotalPeriods, newTotalPeriods);
+    mortgagePosition.interestRate = newInterestRate;
+    mortgagePosition.totalPeriods = newTotalPeriods;
+    mortgagePosition.amountPrior += principalPaid;
+    mortgagePosition.termOriginated = uint32(block.timestamp);
+    mortgagePosition.termPaid = 0;
+    mortgagePosition.amountConverted += principalConverted;
+    mortgagePosition.termConverted = 0;
+    return mortgagePosition;
+  }
+
   /**
    * @dev Refinances a mortgage position
    * @param mortgagePosition The mortgage position
@@ -582,21 +599,8 @@ library MortgageMath {
     mortgagePosition.penaltyAccrued += refinanceFee;
     mortgagePosition.penaltyPaid += refinanceFee;
 
-    // Update the mortgagePosition with the new values
-    mortgagePosition.interestRate = newInterestRate;
-    mortgagePosition.totalPeriods = newTotalPeriods;
-
-    uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
-    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(
-      mortgagePosition.termPaid + mortgagePosition.termConverted
-    ) - principalPaid;
-    mortgagePosition.termBalance =
-      calculateTermBalance(mortgagePosition.principalRemaining(), newInterestRate, newTotalPeriods, newTotalPeriods);
-    mortgagePosition.amountPrior += principalPaid;
-    mortgagePosition.termOriginated = uint32(block.timestamp);
-    mortgagePosition.termPaid = 0;
-    mortgagePosition.amountConverted += principalConverted;
-    mortgagePosition.termConverted = 0;
+    // // Update the mortgagePosition with the new values
+    mortgagePosition = _refinanceHelper(mortgagePosition, 0, newInterestRate, newTotalPeriods);
 
     // Return the updated mortgage position and the refinance fee
     return (mortgagePosition, refinanceFee);
@@ -710,28 +714,11 @@ library MortgageMath {
     }
     // Calculate the new interest rate
     uint16 averageInterestRate = mortgagePosition.calculateNewAverageInterestRate(amountIn, newInterestRate);
-    // Calculate how much of the principal has been paid off
-    uint256 principalPaid = mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
-    uint256 principalConverted = mortgagePosition.convertPaymentToPrincipal(
-      mortgagePosition.termPaid + mortgagePosition.termConverted
-    ) - principalPaid;
 
-    // Calculate the new term balance
-    mortgagePosition.termBalance = calculateTermBalance(
-      mortgagePosition.principalRemaining() + amountIn,
-      averageInterestRate,
-      mortgagePosition.totalPeriods,
-      mortgagePosition.totalPeriods
-    );
-    // Update the mortgagePosition details
-    mortgagePosition.interestRate = averageInterestRate;
+    // Update the mortgagePosition with the new values
+    mortgagePosition = _refinanceHelper(mortgagePosition, amountIn, averageInterestRate, mortgagePosition.totalPeriods);
     mortgagePosition.collateralAmount += collateralAmountIn;
-    mortgagePosition.termOriginated = uint32(block.timestamp); // Reset term origination date
     mortgagePosition.amountBorrowed += amountIn;
-    mortgagePosition.amountPrior += principalPaid;
-    mortgagePosition.termPaid = 0;
-    mortgagePosition.amountConverted += principalConverted;
-    mortgagePosition.termConverted = 0;
 
     // Return the updated mortgage position
     return mortgagePosition;
