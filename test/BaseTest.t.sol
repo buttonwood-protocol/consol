@@ -86,16 +86,16 @@ contract BaseTest is Test {
   // Parameters
   uint16 public penaltyRate = 50; // 50 bps
   uint16 public refinanceRate = 50; // 50 bps
+  uint16 public conversionPremiumRate = 5000; // 50%
   uint8 public constant DEFAULT_MORTGAGE_PERIODS = 36; // 36 Month mortage
   OriginationPoolConfig public originationPoolConfig;
-  uint256 public conversionPriceMultiplierBps = 5000; // 50%
   uint256 public orderPoolMaximumOrderDuration = 5 minutes;
 
   function _createGeneralManager() internal {
     GeneralManager generalManagerImplementation = new GeneralManager();
     bytes memory initializerData = abi.encodeCall(
       GeneralManager.initialize,
-      (address(usdx), address(consol), penaltyRate, refinanceRate, insuranceFund, address(interestRateOracle))
+      (address(usdx), address(consol), penaltyRate, refinanceRate, conversionPremiumRate, insuranceFund, address(interestRateOracle))
     );
     vm.startPrank(admin);
     ERC1967Proxy proxy = new ERC1967Proxy(address(generalManagerImplementation), initializerData);
@@ -153,7 +153,6 @@ contract BaseTest is Test {
       address(wbtc),
       IERC20Metadata(address(wbtc)).decimals(),
       address(subConsol),
-      conversionPriceMultiplierBps,
       address(consol),
       address(generalManager),
       admin
@@ -368,8 +367,10 @@ contract BaseTest is Test {
     wbtc = new MockERC20("Wrapped Bitcoin", "WBTC", 8);
     vm.label(address(wbtc), "WBTC");
     subConsol = new SubConsol("Bitcoin SubConsol", "BTC-SUBCONSOL", address(admin), address(wbtc));
+    vm.label(address(subConsol), "BTC-SUBCONSOL");
     // Create the consol
     consol = new Consol("Consol", "CONSOL", 8, address(admin), address(forfeitedAssetsPool));
+    vm.label(address(consol), "CONSOL");
     // Create the oracles
     mockPyth = new MockPyth();
     interestRateOracle = new StaticInterestRateOracle(INTEREST_RATE_BASE);

@@ -7,6 +7,7 @@ import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ILoanManager} from "./interfaces/ILoanManager/ILoanManager.sol";
 import {MortgagePosition, MortgageStatus} from "./types/MortgagePosition.sol";
+import {MortgageParams} from "./types/orders/MortgageParams.sol";
 import {IConsol} from "./interfaces/IConsol/IConsol.sol";
 import {IGeneralManager} from "./interfaces/IGeneralManager/IGeneralManager.sol";
 import {IMortgageNFT} from "./interfaces/IMortgageNFT/IMortgageNFT.sol";
@@ -255,41 +256,31 @@ contract LoanManager is ILoanManager, ERC165, Context {
   /**
    * @inheritdoc ILoanManager
    */
-  function createMortgage(
-    address owner,
-    uint256 tokenId,
-    address collateral,
-    uint8 collateralDecimals,
-    uint256 collateralAmount,
-    address subConsol,
-    uint16 interestRate,
-    uint256 amountBorrowed,
-    uint8 totalPeriods,
-    bool hasPaymentPlan
-  ) external override onlyGeneralManager {
+  function createMortgage(MortgageParams memory mortgageParams) external override onlyGeneralManager {
     // Validate that the amount borrowed is above a minimum threshold
-    if (amountBorrowed < Constants.MINIMUM_AMOUNT_BORROWED) {
-      revert AmountBorrowedBelowMinimum(amountBorrowed, Constants.MINIMUM_AMOUNT_BORROWED);
+    if (mortgageParams.amountBorrowed < Constants.MINIMUM_AMOUNT_BORROWED) {
+      revert AmountBorrowedBelowMinimum(mortgageParams.amountBorrowed, Constants.MINIMUM_AMOUNT_BORROWED);
     }
 
     // Create a new mortgage position
-    mortgagePositions[tokenId] = MortgageMath.createNewMortgagePosition(
-      tokenId,
-      collateral,
-      collateralDecimals,
-      subConsol,
-      collateralAmount,
-      amountBorrowed,
-      interestRate,
-      totalPeriods,
-      hasPaymentPlan
+    mortgagePositions[mortgageParams.tokenId] = MortgageMath.createNewMortgagePosition(
+      mortgageParams.tokenId,
+      mortgageParams.collateral,
+      mortgageParams.collateralDecimals,
+      mortgageParams.subConsol,
+      mortgageParams.collateralAmount,
+      mortgageParams.amountBorrowed,
+      mortgageParams.interestRate,
+      mortgageParams.conversionPremiumRate,
+      mortgageParams.totalPeriods,
+      mortgageParams.hasPaymentPlan
     );
 
     // Deposit the collateral -> subConsol -> Consol into the general manager
-    _depositCollateralToConsolForGeneralManager(collateral, subConsol, collateralAmount, amountBorrowed);
+    _depositCollateralToConsolForGeneralManager(mortgageParams.collateral, mortgageParams.subConsol, mortgageParams.collateralAmount, mortgageParams.amountBorrowed);
 
     // Emit a create mortgage event
-    emit CreateMortgage(tokenId, owner, collateral, collateralAmount, amountBorrowed);
+    emit CreateMortgage(mortgageParams.tokenId, mortgageParams.owner, mortgageParams.collateral, mortgageParams.collateralAmount, mortgageParams.amountBorrowed);
   }
 
   /**
@@ -509,7 +500,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
   /**
    * @inheritdoc ILoanManager
    */
-  function convertMortgage(uint256 tokenId, uint256 amount, uint256 collateralAmount, address receiver)
+  function convertMortgage(uint256 tokenId, uint256 currentPrice, uint256 amount, uint256 collateralAmount, address receiver)
     external
     override
     mortgageExistsAndActive(tokenId)
@@ -517,7 +508,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     onlyGeneralManager
   {
     mortgagePositions[tokenId] =
-      mortgagePositions[tokenId].convert(amount, collateralAmount, Constants.LATE_PAYMENT_WINDOW);
+      mortgagePositions[tokenId].convert(currentPrice, amount, collateralAmount, Constants.LATE_PAYMENT_WINDOW);
 
     // Cache the SubConsol
     address subConsol = mortgagePositions[tokenId].subConsol;

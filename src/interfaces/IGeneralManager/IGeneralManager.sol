@@ -89,6 +89,21 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
   function interestRate(address collateral, uint8 totalPeriods, bool hasPaymentPlan) external view returns (uint16);
 
   /**
+   * @notice Returns the conversion premium rate (in basis points)
+   * @param collateral The address of the collateral
+   * @param totalPeriods The total number of periods for the mortgage
+   * @param hasPaymentPlan Whether the mortgage has a payment plan
+   * @return The conversion premium rate
+   */
+  function conversionPremiumRate(address collateral, uint8 totalPeriods, bool hasPaymentPlan) external view returns (uint16);
+
+  /**
+   * @notice Sets the conversion premium rate (in basis points)
+   * @param conversionPremiumRate_ The conversion premium rate
+   */
+  function setConversionPremiumRate(uint16 conversionPremiumRate_) external;
+
+  /**
    * @notice Sets the origination pool scheduler address
    * @param originationPoolScheduler_ The origination pool scheduler address
    */

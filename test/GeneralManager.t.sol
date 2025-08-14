@@ -104,6 +104,7 @@ contract GeneralManagerTest is BaseTest {
     assertEq(
       generalManager.interestRateOracle(), address(interestRateOracle), "Interest rate oracle should be set correctly"
     );
+    assertEq(generalManager.conversionPremiumRate(address(wbtc), DEFAULT_MORTGAGE_PERIODS, true), conversionPremiumRate, "Conversion premium rate should be set correctly");
     assertEq(
       generalManager.originationPoolScheduler(),
       address(originationPoolScheduler),
@@ -259,6 +260,32 @@ contract GeneralManagerTest is BaseTest {
 
     // Validate the interest rate was set correctly
     assertEq(interestRate, expectedInterestRate, "Interest rate should be set correctly");
+  }
+
+  function test_setConversionPremiumRate_shouldRevertIfNotAdmin(address caller, uint16 newConversionPremiumRate) public {
+    // Ensure the caller doesn't have the admin role
+    vm.assume(!GeneralManager(address(generalManager)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
+
+    // Attempt to set the conversion premium rate without the admin role
+    vm.startPrank(caller);
+    vm.expectRevert(
+      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
+    );
+    generalManager.setConversionPremiumRate(newConversionPremiumRate);
+    vm.stopPrank();
+  }
+
+  function test_setConversionPremiumRate(uint16 newConversionPremiumRate, address collateral, uint8 totalPeriods, bool hasPaymentPlan) public {
+
+    // Set the conversion premium rate as admin
+    vm.startPrank(admin);
+    vm.expectEmit(true, true, true, true);
+    emit IGeneralManagerEvents.ConversionPremiumRateSet(conversionPremiumRate, newConversionPremiumRate);
+    generalManager.setConversionPremiumRate(newConversionPremiumRate);
+    vm.stopPrank();
+
+    // Validate the conversion premium rate was set correctly
+    assertEq(generalManager.conversionPremiumRate(collateral, totalPeriods, hasPaymentPlan), newConversionPremiumRate, "Conversion premium rate should be set correctly");
   }
 
   function test_setOriginationPoolScheduler_shouldRevertIfNotAdmin(address caller, address newOriginationPoolScheduler)
@@ -1564,6 +1591,7 @@ contract GeneralManagerTest is BaseTest {
     address caller,
     CreationRequest memory createRequestSeed,
     uint256 collateralAmount,
+    uint64 currentPrice,
     uint256 principalConverting,
     uint256 collateralConversionAmount,
     address receiver
@@ -1644,6 +1672,9 @@ contract GeneralManagerTest is BaseTest {
 
     // Make sure the conversion amount is less than or equal to the principalRemaining
     principalConverting = bound(principalConverting, 1, mortgagePosition.principalRemaining());
+    // Make sure the collateral conversion amount is less than or equal to the collateral amount
+    collateralConversionAmount = bound(collateralConversionAmount, 1, creationRequest.base.collateralAmounts[0]);
+    
 
     // Deal amountConverting amount of consol to the generalManager to emulate having it sent by the ConversionQueue
     {
@@ -1661,6 +1692,10 @@ contract GeneralManagerTest is BaseTest {
 
     // Calculate expectedTermConverted
     uint256 expectedTermConverted = mortgagePosition.convertPrincipalToPayment(principalConverting);
+
+    // // Set the oracle values while ensuring currentPrice is greater than or equal to the conversion trigger price
+    currentPrice = uint64(bound(currentPrice, mortgagePosition.conversionTriggerPrice() / 1e10 + 1, uint64(type(int64).max)));
+    mockPyth.setPrice(BTC_PRICE_ID, int64(currentPrice), 4349253107, -8, block.timestamp);
 
     // Have the caller convert the mortgage
     vm.startPrank(caller);

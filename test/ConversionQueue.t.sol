@@ -101,7 +101,6 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
       IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, admin),
       "Admin does not have the default admin role"
     );
-    assertEq(conversionQueue.priceMultiplierBps(), conversionPriceMultiplierBps, "Price multiplier BPS mismatch");
   }
 
   function test_supportsInterface() public view {
@@ -127,7 +126,7 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     );
   }
 
-  function test_conversionPrice(int64 rawPrice) public {
+  function test_convertingPrice(int64 rawPrice) public {
     // Ensure that the price is between $10k and $1m
     rawPrice = int64(uint64((bound(uint64(rawPrice), 10_000e8, 1_000_000e8))));
 
@@ -135,38 +134,11 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     mockPyth.setPrice(BTC_PRICE_ID, rawPrice, 100e8, -8, block.timestamp);
 
     // Fetch the current conversion price used in the conversion queue
-    uint256 conversionPrice = conversionQueue.conversionPrice();
+    uint256 convertingPrice = conversionQueue.convertingPrice();
 
     // Assert that the conversion price is equal to the raw price
-    uint256 expectedConversionPrice = uint256(uint256(uint64(rawPrice)) * 1e10);
-    assertEq(conversionPrice, expectedConversionPrice, "Conversion price mismatch");
-  }
-
-  function test_setPriceMultiplierBps_revertsWhenDoesNotHaveAdminRole(address caller, uint16 newPriceMultiplierBps)
-    public
-  {
-    // Make sure the caller does not have the admin role
-    vm.assume(!IAccessControl(address(conversionQueue)).hasRole(Roles.DEFAULT_ADMIN_ROLE, caller));
-
-    // Attempt to set the price multiplier BPS without the admin role
-    vm.startPrank(caller);
-    vm.expectRevert(
-      abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, caller, Roles.DEFAULT_ADMIN_ROLE)
-    );
-    conversionQueue.setPriceMultiplierBps(newPriceMultiplierBps);
-    vm.stopPrank();
-  }
-
-  function test_setPriceMultiplierBps(uint16 newPriceMultiplierBps) public {
-    // Attempt to set the price multiplier BPS as admin
-    vm.startPrank(admin);
-    vm.expectEmit(true, true, true, true);
-    emit PriceMultiplierBpsSet(newPriceMultiplierBps);
-    conversionQueue.setPriceMultiplierBps(newPriceMultiplierBps);
-    vm.stopPrank();
-
-    // Validate that the conversion price multiplier BPS is set to the new value
-    assertEq(conversionQueue.priceMultiplierBps(), newPriceMultiplierBps, "Conversion price multiplier BPS mismatch");
+    uint256 expectedConvertingPrice = uint256(uint256(uint64(rawPrice)) * 1e10);
+    assertEq(convertingPrice, expectedConvertingPrice, "Converting price mismatch");
   }
 
   function test_processWithdrawalRequests_revertsNoMortgagesEnqueued(uint256 numberOfRequests) public {

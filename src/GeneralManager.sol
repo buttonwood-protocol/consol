@@ -70,6 +70,7 @@ contract GeneralManager is
     address _consol;
     uint16 _penaltyRate;
     uint16 _refinanceRate;
+    uint16 _conversionPremiumRate;
     address _insuranceFund;
     address _interestRateOracle;
     address _originationPoolScheduler;
@@ -118,10 +119,11 @@ contract GeneralManager is
     address consol_,
     uint16 penaltyRate_,
     uint16 refinanceRate_,
+    uint16 conversionPremiumRate_,
     address insuranceFund_,
     address interestRateOracle_
   ) internal onlyInitializing {
-    __GeneralManager_init_unchained(usdx_, consol_, penaltyRate_, refinanceRate_, insuranceFund_, interestRateOracle_);
+    __GeneralManager_init_unchained(usdx_, consol_, penaltyRate_, refinanceRate_, conversionPremiumRate_, insuranceFund_, interestRateOracle_);
   }
 
   /**
@@ -139,6 +141,7 @@ contract GeneralManager is
     address consol_,
     uint16 penaltyRate_,
     uint16 refinanceRate_,
+    uint16 conversionPremiumRate_,
     address insuranceFund_,
     address interestRateOracle_
   ) internal onlyInitializing {
@@ -147,6 +150,7 @@ contract GeneralManager is
     $._consol = consol_;
     $._penaltyRate = penaltyRate_;
     $._refinanceRate = refinanceRate_;
+    $._conversionPremiumRate = conversionPremiumRate_;
     $._insuranceFund = insuranceFund_;
     $._interestRateOracle = interestRateOracle_;
     // Give Consol approval to spend the USDX from the GeneralManager
@@ -167,10 +171,11 @@ contract GeneralManager is
     address consol_,
     uint16 penaltyRate_,
     uint16 refinanceRate_,
+    uint16 conversionPremiumRate_,
     address insuranceFund_,
     address interestRateOracle_
   ) external initializer {
-    __GeneralManager_init(usdx_, consol_, penaltyRate_, refinanceRate_, insuranceFund_, interestRateOracle_);
+    __GeneralManager_init(usdx_, consol_, penaltyRate_, refinanceRate_, conversionPremiumRate_, insuranceFund_, interestRateOracle_);
     _grantRole(Roles.DEFAULT_ADMIN_ROLE, _msgSender());
   }
 
@@ -497,6 +502,21 @@ contract GeneralManager is
   /**
    * @inheritdoc IGeneralManager
    */
+  function conversionPremiumRate(address, uint8, bool) public view returns (uint16) {
+    return _getGeneralManagerStorage()._conversionPremiumRate;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
+  function setConversionPremiumRate(uint16 conversionPremiumRate_) external onlyRole(Roles.DEFAULT_ADMIN_ROLE) {
+    emit ConversionPremiumRateSet(_getGeneralManagerStorage()._conversionPremiumRate, conversionPremiumRate_);
+    _getGeneralManagerStorage()._conversionPremiumRate = conversionPremiumRate_;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
   function setOriginationPoolScheduler(address originationPoolScheduler_) external onlyRole(Roles.DEFAULT_ADMIN_ROLE) {
     emit OriginationPoolSchedulerSet(_getGeneralManagerStorage()._originationPoolScheduler, originationPoolScheduler_);
     _getGeneralManagerStorage()._originationPoolScheduler = originationPoolScheduler_;
@@ -727,6 +747,7 @@ contract GeneralManager is
       collateralAmount: mortgageParams.collateralAmount,
       subConsol: subConsol,
       interestRate: interestRate(collateral, baseRequest.totalPeriods, hasPaymentPlan),
+      conversionPremiumRate: conversionPremiumRate(collateral, baseRequest.totalPeriods, hasPaymentPlan),
       amountBorrowed: mortgageParams.amountBorrowed,
       totalPeriods: baseRequest.totalPeriods,
       hasPaymentPlan: hasPaymentPlan
@@ -977,18 +998,7 @@ contract GeneralManager is
         );
       } else {
         // Create a new mortgage position
-        ILoanManager($._loanManager).createMortgage(
-          originationParameters.mortgageParams.owner,
-          originationParameters.mortgageParams.tokenId,
-          originationParameters.mortgageParams.collateral,
-          originationParameters.mortgageParams.collateralDecimals,
-          originationParameters.mortgageParams.collateralAmount,
-          originationParameters.mortgageParams.subConsol,
-          originationParameters.mortgageParams.interestRate,
-          originationParameters.mortgageParams.amountBorrowed,
-          originationParameters.mortgageParams.totalPeriods,
-          originationParameters.mortgageParams.hasPaymentPlan
-        );
+        ILoanManager($._loanManager).createMortgage(originationParameters.mortgageParams);
       }
 
       // Enqueue the mortgage position into the conversion queue
@@ -1068,8 +1078,14 @@ contract GeneralManager is
     // Approve loanManager for the amount of Consol
     IConsol($._consol).approve(address(ILoanManager($._loanManager)), amount);
 
+    // Fetch the asset of the mortgage position
+    address asset = ILoanManager($._loanManager).getMortgagePosition(tokenId).collateral;
+
+    // Fetch the current price of the collateral
+    uint256 currentPrice = IPriceOracle($._priceOracles[asset]).price();
+
     // Convert the mortgage position
-    ILoanManager($._loanManager).convertMortgage(tokenId, amount, collateralAmount, receiver);
+    ILoanManager($._loanManager).convertMortgage(tokenId, currentPrice, amount, collateralAmount, receiver);
   }
 
   /**

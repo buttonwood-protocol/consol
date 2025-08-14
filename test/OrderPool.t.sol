@@ -32,9 +32,10 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 tokenId,
     uint256 collateralAmount,
     uint16 interestRate,
+    uint16 conversionPremiumRate,
     uint256 amountBorrowed,
     bool hasPaymentPlan
-  ) public view returns (MortgageParams memory) {
+  ) internal view returns (MortgageParams memory) {
     return MortgageParams({
       owner: borrower,
       tokenId: tokenId,
@@ -43,6 +44,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
       collateralAmount: collateralAmount,
       subConsol: address(subConsol),
       interestRate: interestRate,
+      conversionPremiumRate: conversionPremiumRate,
       amountBorrowed: amountBorrowed,
       totalPeriods: DEFAULT_MORTGAGE_PERIODS,
       hasPaymentPlan: hasPaymentPlan
@@ -270,6 +272,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 tokenId,
     uint256 collateralAmount,
     uint16 interestRate,
+    uint16 conversionPremiumRate,
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
@@ -285,7 +288,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
-      createMortgageParams(tokenId, collateralAmount, interestRate, amountBorrowed, true);
+      createMortgageParams(tokenId, collateralAmount, interestRate, conversionPremiumRate, amountBorrowed, true);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
@@ -365,6 +368,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 tokenId,
     uint256 collateralAmount,
     uint16 interestRate,
+    uint16 conversionPremiumRate,
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
@@ -380,7 +384,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
-      createMortgageParams(tokenId, collateralAmount, interestRate, amountBorrowed, true);
+      createMortgageParams(tokenId, collateralAmount, interestRate, conversionPremiumRate, amountBorrowed, true);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
@@ -475,6 +479,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
   function test_processOrders_orderIsExpired(
     uint256 collateralAmount,
     uint16 interestRate,
+    uint16 conversionPremiumRate,
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
@@ -498,7 +503,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
-      createMortgageParams(tokenId, collateralAmount, interestRate, amountBorrowed, true);
+      createMortgageParams(tokenId, collateralAmount, interestRate, conversionPremiumRate, amountBorrowed, true);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
@@ -598,6 +603,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 tokenId,
     uint256 collateralAmount,
     uint16 interestRate,
+    uint16 conversionPremiumRate,
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
@@ -628,7 +634,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
-      createMortgageParams(tokenId, collateralAmount, interestRate, amountBorrowed, true);
+      createMortgageParams(tokenId, collateralAmount, interestRate, conversionPremiumRate, amountBorrowed, true);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
@@ -742,6 +748,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     uint256 tokenId,
     uint256 collateralAmount,
     uint16 interestRate,
+    uint16 conversionPremiumRate,
     uint256 amountBorrowed,
     OrderAmounts memory orderAmounts,
     uint256 expiration,
@@ -772,7 +779,7 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
 
     // Create the mortgage params
     MortgageParams memory mortgageParams =
-      createMortgageParams(tokenId, collateralAmount, interestRate, amountBorrowed, true);
+      createMortgageParams(tokenId, collateralAmount, interestRate, conversionPremiumRate, amountBorrowed, true);
 
     // Have the admin set the gas fee on the conversion queue
     vm.startPrank(admin);
