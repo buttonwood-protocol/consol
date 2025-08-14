@@ -106,6 +106,11 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     return _orders[index];
   }
 
+  /**
+   * @dev Calculates the mortgage gas fee for a list of conversion queues
+   * @param conversionQueues The list of conversion queues to calculate the mortgage gas fee for
+   * @return mortgageGasFee The total mortgage gas fee
+   */
   function _calculateMortgageGasFee(address[] memory conversionQueues) internal view returns (uint256 mortgageGasFee) {
     for (uint256 i = 0; i < conversionQueues.length; i++) {
       mortgageGasFee += IConversionQueue(conversionQueues[i]).mortgageGasFee();

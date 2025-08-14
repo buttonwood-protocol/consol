@@ -15,7 +15,6 @@ import {IConversionQueue, ILenderQueue} from "./interfaces/IConversionQueue/ICon
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {MortgageMath} from "./libraries/MortgageMath.sol";
 import {Roles} from "./libraries/Roles.sol";
-import {Constants} from "./libraries/Constants.sol";
 // solhint-disable-next-line no-unused-import
 import {IPausable} from "./interfaces/IPausable/IPausable.sol";
 // solhint-disable-next-line no-unused-import

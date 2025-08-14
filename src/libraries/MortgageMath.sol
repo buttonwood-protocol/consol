@@ -206,6 +206,11 @@ library MortgageMath {
     return mortgagePosition.termBalance - mortgagePosition.termConverted - mortgagePosition.termPaid;
   }
 
+  /**
+   * @dev Defined as the amount of collateral left to be converted
+   * @param mortgagePosition The mortgage position
+   * @return The amount of collateral that is left to be converted
+   */
   function collateralRemaining(MortgagePosition memory mortgagePosition) internal pure returns (uint256) {
     return mortgagePosition.collateralAmount - mortgagePosition.collateralConverted;
   }
@@ -549,6 +554,14 @@ library MortgageMath {
     return mortgagePosition;
   }
 
+  /**
+   * @dev Helper function to refinance/expand a mortgage position
+   * @param mortgagePosition The mortgage position
+   * @param principalIn The amount of principal to add to the mortgage position. 0 for refinance, >0 for expansion
+   * @param newInterestRate The new interest rate.
+   * @param newTotalPeriods The new total number of periods. Should stay the same for expansion.
+   * @return The updated mortgage position
+   */
   function _refinanceHelper(
     MortgagePosition memory mortgagePosition,
     uint256 principalIn,
@@ -640,6 +653,7 @@ library MortgageMath {
   /**
    * @dev Converts a mortgage position by reducing the principal and collateral
    * @param mortgagePosition The mortgage position
+   * @param currentPrice The current price of the collateral
    * @param principalConverting The amount of principal to convert
    * @param collateralConverting The amount of collateral to convert
    * @param latePenaltyWindow The number of days after the due date that a payment is still considered on time

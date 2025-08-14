@@ -53,6 +53,7 @@ contract GeneralManager is
    * @param _consol Address of the Consol token contract
    * @param _penaltyRate Late payment penalty rate in basis points (BPS)
    * @param _refinanceRate Refinancing fee rate in basis points (BPS)
+   * @param _conversionPremiumRate Conversion premium rate in basis points (BPS)
    * @param _insuranceFund Address of the insurance fund
    * @param _interestRateOracle Address of the interest rate oracle contract
    * @param _originationPoolScheduler Address of the origination pool scheduler contract
@@ -63,6 +64,7 @@ contract GeneralManager is
    * @param _minimumCaps Mapping of collateral address to minimum cap
    * @param _maximumCaps Mapping of collateral address to maximum cap
    * @param _conversionQueues Mapping of collateral address to conversion queues
+   * @param _mortgageEnqueued Mapping of tokenId to conversion queue to enqueued status
    * @param _paused Whether the contract is paused
    */
   struct GeneralManagerStorage {
@@ -110,6 +112,7 @@ contract GeneralManager is
    * @param consol_ The address of the Consol token
    * @param penaltyRate_ The penalty rate
    * @param refinanceRate_ The refinancing rate
+   * @param conversionPremiumRate_ The conversion premium rate
    * @param insuranceFund_ The address of the insurance fund
    * @param interestRateOracle_ The address of the interest rate oracle
    */
@@ -134,6 +137,7 @@ contract GeneralManager is
    * @param consol_ The address of the Consol token
    * @param penaltyRate_ The penalty rate
    * @param refinanceRate_ The refinancing rate
+   * @param conversionPremiumRate_ The conversion premium rate
    * @param insuranceFund_ The address of the insurance fund
    * @param interestRateOracle_ The address of the interest rate oracle
    */
@@ -165,6 +169,7 @@ contract GeneralManager is
    * @param consol_ The address of the Consol token
    * @param penaltyRate_ The penalty rate
    * @param refinanceRate_ The refinancing rate
+   * @param conversionPremiumRate_ The conversion premium rate
    * @param insuranceFund_ The address of the insurance fund
    * @param interestRateOracle_ The address of the interest rate oracle
    */
@@ -224,7 +229,12 @@ contract GeneralManager is
     _;
   }
 
-  function _updateConversionQueues(uint256 tokenId, address[] memory conversionQueueList) internal {
+  /**
+   * @dev Appends the conversionQueueList to the recorded conversion queues for a mortgage position
+   * @param tokenId The tokenId of the mortgage position
+   * @param conversionQueueList The list of conversion queues to update
+   */
+  function _addConversionQueues(uint256 tokenId, address[] memory conversionQueueList) internal {
     // Fetch storage
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
@@ -289,18 +299,6 @@ contract GeneralManager is
       }
     }
   }
-
-  // /**
-  //  * @dev Modifier to both check if the caller has sent enough gas and to refund the surplus
-  //  * @param usingOrderPool Whether the caller is using the order pool
-  //  * @param tokenId The tokenId of the mortgage position
-  //  */
-  // modifier sufficientGasFeeAndRefund(bool usingOrderPool, uint256 tokenId) {
-  //   uint256 requiredGasFee = _calculateRequiredGasFee(usingOrderPool, tokenId);
-  //   _checkSufficientGas(requiredGasFee);
-  //   _;
-  //   _refundSurplusGas(requiredGasFee);
-  // }
 
   /**
    * @dev Validates that the caller is the owner of the mortgage
@@ -383,6 +381,10 @@ contract GeneralManager is
     }
   }
 
+  /**
+   * @dev Validates that the conversion queues have the CONVERSION_ROLE role
+   * @param conversionQueueList The list of conversion queues to validate
+   */
   function _validateConversionQueues(address[] memory conversionQueueList) internal view {
     // Validate that the conversion queues are registered (if none are passed, this is a no-op)
     for (uint256 i = 0; i < conversionQueueList.length; i++) {
@@ -766,6 +768,7 @@ contract GeneralManager is
    * @param mortgageParams The mortgage parameters
    * @param orderAmounts The order amounts
    * @param baseRequest The base request for the mortgage
+   * @param conversionQueueList The addresses of the conversion queues to use
    * @param expansion Whether the request is a new mortgage creation or a balance sheet expansion
    */
   function _sendOrder(
@@ -870,7 +873,7 @@ contract GeneralManager is
     tokenId = IMortgageNFT(mortgageNFT()).mint(_msgSender(), creationRequest.mortgageId);
 
     // Set the conversion queues for the mortgage position
-    _updateConversionQueues(tokenId, creationRequest.conversionQueues);
+    _addConversionQueues(tokenId, creationRequest.conversionQueues);
 
     // Check if the caller has sent enough gas and refund the surplus
     uint256 requiredGasFee = _calculateRequiredGasFee(true, tokenId);
@@ -1058,8 +1061,8 @@ contract GeneralManager is
     // sufficientGasFeeAndRefund(false, conversionQueueList)
     onlyMortgageOwner(tokenId)
   {
-    // Set the conversion queues for the mortgage position
-    _updateConversionQueues(tokenId, conversionQueueList);
+    // Add the conversion queues for the mortgage position
+    _addConversionQueues(tokenId, conversionQueueList);
 
     // Calculate the required gas fee
     uint256 requiredGasFee = _calculateRequiredGasFee(false, tokenId);

@@ -246,10 +246,17 @@ contract LoanManager is ILoanManager, ERC165, Context {
     }
   }
 
+  /**
+   * @dev Forfeits the Consol in the LoanManager contract
+   */
   function _forfeitConsol() internal {
     IConsol(consol).forfeit(IConsol(consol).balanceOf(address(this)));
   }
 
+  /**
+   * @dev Validates that the amount borrowed is above a minimum threshold
+   * @param amountBorrowed The amount borrowed
+   */
   function _validateMinimumAmountBorrowed(uint256 amountBorrowed) internal pure {
     if (amountBorrowed < Constants.MINIMUM_AMOUNT_BORROWED) {
       revert AmountBorrowedBelowMinimum(amountBorrowed, Constants.MINIMUM_AMOUNT_BORROWED);
