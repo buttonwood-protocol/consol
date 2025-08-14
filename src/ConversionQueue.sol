@@ -147,11 +147,12 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
   /**
    * @inheritdoc IConversionQueue
    */
-  function enqueueMortgage(uint256 mortgageTokenId, uint256 hintPrevId, bool reenqueue)
+  function enqueueMortgage(uint256 mortgageTokenId, uint256 hintPrevId)
     external
     payable
     override
     whenNotPaused
+    nonReentrant
   {
     // Validate that the caller is the general manager
     if (_msgSender() != generalManager) {
@@ -167,8 +168,8 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
     // Calculate the trigger price
     uint256 triggerPrice = _calculateTriggerPrice(mortgagePosition);
 
-    // If the mortgage is being re-enqueued, remove it from the mortgage queue first to re-insert it at the correct position
-    if (reenqueue) {
+    // If the mortgage is already enqueued, remove it from the mortgage queue first to re-insert it at the correct position
+    if (_mortgageNodes[mortgageTokenId].tokenId != 0) {
       // Remove the mortgage from the mortgage queue and record the gas fee to refund
       uint256 collectedGasFees = _removeMortgage(mortgageTokenId);
 

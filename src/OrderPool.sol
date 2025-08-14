@@ -106,13 +106,19 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     return _orders[index];
   }
 
+  function _calculateMortgageGasFee(address[] memory conversionQueues) internal view returns (uint256 mortgageGasFee) {
+    for (uint256 i = 0; i < conversionQueues.length; i++) {
+      mortgageGasFee += IConversionQueue(conversionQueues[i]).mortgageGasFee();
+    }
+  }
+
   /**
    * @inheritdoc IOrderPool
    */
   function sendOrder(
     address[] memory originationPools,
     uint256[] memory borrowAmounts,
-    address conversionQueue,
+    address[] memory conversionQueues,
     OrderAmounts memory orderAmounts,
     MortgageParams memory mortgageParams,
     uint256 expiration,
@@ -140,12 +146,12 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     _orders[index] = PurchaseOrder({
       originationPools: originationPools,
       borrowAmounts: borrowAmounts,
-      conversionQueue: conversionQueue,
+      conversionQueues: conversionQueues,
       orderAmounts: orderAmounts,
       mortgageParams: mortgageParams,
       timestamp: block.timestamp,
       expiration: expiration,
-      mortgageGasFee: conversionQueue == address(0) ? 0 : IConversionQueue(conversionQueue).mortgageGasFee(),
+      mortgageGasFee: _calculateMortgageGasFee(conversionQueues),
       orderPoolGasFee: gasFee,
       expansion: expansion
     });
@@ -178,10 +184,10 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
   /**
    * @dev Processes an order at a given internal index
    * @param index The index of the order
-   * @param hintPrevId The hint for the previous order
+   * @param hintPrevIds List of hints for identifying the previous mortgage position in the respective conversion queue.
    * @return collectedGasFee The amount of gas fee collected
    */
-  function _processOrder(uint256 index, uint256 hintPrevId) internal returns (uint256 collectedGasFee) {
+  function _processOrder(uint256 index, uint256[] memory hintPrevIds) internal returns (uint256 collectedGasFee) {
     // Fetch the order from the orders mapping
     PurchaseOrder memory order = _orders[index];
 
@@ -208,6 +214,11 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
         IERC20(order.mortgageParams.collateral).safeTransferFrom(_msgSender(), generalManager, collateralRequested);
       }
 
+      // Validate that the hintPrevIds list is the same length as the conversion queues list
+      if (hintPrevIds.length != order.conversionQueues.length) {
+        revert HintPrevIdsListLengthMismatch(index, hintPrevIds.length, order.conversionQueues.length);
+      }
+
       // Originate the mortgage (fulfiller will receive back the purchaseAmount of USDX)
       IGeneralManager(generalManager).originate{value: order.mortgageGasFee}(
         OriginationParameters({
@@ -215,8 +226,8 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
           fulfiller: _msgSender(),
           originationPools: order.originationPools,
           borrowAmounts: order.borrowAmounts,
-          conversionQueue: order.conversionQueue,
-          hintPrevId: hintPrevId,
+          conversionQueues: order.conversionQueues,
+          hintPrevIds: hintPrevIds,
           expansion: order.expansion,
           purchaseAmount: order.orderAmounts.purchaseAmount
         })
@@ -235,7 +246,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
   /**
    * @inheritdoc IOrderPool
    */
-  function processOrders(uint256[] memory indices, uint256[] memory hintPrevIds)
+  function processOrders(uint256[] memory indices, uint256[][] memory hintPrevIdsList)
     external
     onlyRole(Roles.FULFILLMENT_ROLE)
     nonReentrant
@@ -243,7 +254,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     // Start tracking total amount of gas to reimburse
     uint256 collectedGasFees;
     for (uint256 i = 0; i < indices.length; i++) {
-      collectedGasFees += _processOrder(indices[i], hintPrevIds[i]);
+      collectedGasFees += _processOrder(indices[i], hintPrevIdsList[i]);
     }
 
     // Send the collected gas fees to the _msgSender

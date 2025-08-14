@@ -92,13 +92,13 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
           collateralAmounts: collateralAmounts,
           totalPeriods: 36,
           originationPools: originationPools,
-          conversionQueue: address(conversionQueue),
           isCompounding: true,
           expiration: block.timestamp
         }),
         mortgageId: mortgageId,
         collateral: address(btc),
         subConsol: address(btcSubConsol),
+        conversionQueues: conversionQueues,
         hasPaymentPlan: false
       })
     );
@@ -111,7 +111,7 @@ contract Integration_14_CompoundingNoPlanConversionTest is IntegrationBaseTest {
 
     // Fulfiller fulfills the order on the order pool
     vm.startPrank(fulfiller);
-    orderPool.processOrders(new uint256[](1), new uint256[](1));
+    orderPool.processOrders(new uint256[](1), hintPrevIdsList);
     vm.stopPrank();
 
     // Validate that the borrower has the mortgageNFT

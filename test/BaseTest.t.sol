@@ -313,6 +313,12 @@ contract BaseTest is Test {
     address[] memory originationPools = new address[](1);
     originationPools[0] = address(originationPool);
 
+    address[] memory conversionQueues;
+    if (conversionQueueAddress != address(0)) {
+      conversionQueues = new address[](1);
+      conversionQueues[0] = conversionQueueAddress;
+    }
+
     // Have request submit the mortgage request
     vm.startPrank(requester);
     generalManager.requestMortgageCreation(
@@ -321,13 +327,13 @@ contract BaseTest is Test {
           collateralAmounts: collateralAmounts,
           originationPools: originationPools,
           totalPeriods: DEFAULT_MORTGAGE_PERIODS,
-          conversionQueue: conversionQueueAddress,
           isCompounding: false,
           expiration: originationPool.deployPhaseTimestamp()
         }),
         mortgageId: mortgageId,
         collateral: address(wbtc),
         subConsol: address(subConsol),
+        conversionQueues: conversionQueues,
         hasPaymentPlan: true
       })
     );
@@ -336,10 +342,13 @@ contract BaseTest is Test {
     // Have the fulfiller fulfill the Order on the orderPool
     vm.startPrank(fulfiller);
     uint256[] memory indices = new uint256[](1);
-    uint256[] memory hintPrevIds = new uint256[](1);
+    uint256[][] memory hintPrevIdsList = new uint256[][](1);
     indices[0] = orderId;
-    hintPrevIds[0] = 0;
-    orderPool.processOrders(indices, hintPrevIds);
+    if (conversionQueueAddress != address(0)) {
+      hintPrevIdsList[0] = new uint256[](1);
+      hintPrevIdsList[0][0] = 0;
+    }
+    orderPool.processOrders(indices, hintPrevIdsList);
     vm.stopPrank();
   }
 

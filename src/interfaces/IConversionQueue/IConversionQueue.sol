@@ -50,12 +50,11 @@ interface IConversionQueue is IMortgageQueue, ILenderQueue, IPausable, IConversi
   function conversionPrice() external view returns (uint256);
 
   /**
-   * @notice Enqueues a mortgage position into the conversion queue
+   * @notice Enqueues a mortgage position into the conversion queue. If the mortgage position is already in the queue, it will be removed and enqueued again with a potentially new price.
    * @param mortgageTokenId The tokenId of the mortgage position
    * @param hintPrevId The hintPrevId of the mortgage position
-   * @param reenqueue If true, the mortgage position is already enqueued and the trigger price will be updated
    */
-  function enqueueMortgage(uint256 mortgageTokenId, uint256 hintPrevId, bool reenqueue) external payable;
+  function enqueueMortgage(uint256 mortgageTokenId, uint256 hintPrevId) external payable;
 
   /**
    * @notice Dequeues a mortgage position from the conversion queue. Only callable on an inactive mortgage position.

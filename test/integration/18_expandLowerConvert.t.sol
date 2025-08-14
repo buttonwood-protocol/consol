@@ -136,13 +136,13 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
             collateralAmounts: collateralAmounts,
             totalPeriods: 36,
             originationPools: originationPools,
-            conversionQueue: address(conversionQueue),
             isCompounding: true,
             expiration: block.timestamp
           }),
           mortgageId: mortgageId,
           collateral: address(btc),
           subConsol: address(btcSubConsol),
+          conversionQueues: conversionQueues,
           hasPaymentPlan: false
         })
       );
@@ -159,7 +159,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
 
     // Fulfiller fulfills the order on the order pool
     vm.startPrank(fulfiller);
-    orderPool.processOrders(new uint256[](1), new uint256[](1));
+    orderPool.processOrders(new uint256[](1), hintPrevIdsList);
     vm.stopPrank();
 
     // Validate the balances [3]
@@ -273,7 +273,6 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
             collateralAmounts: collateralAmounts,
             totalPeriods: 36,
             originationPools: originationPools,
-            conversionQueue: address(conversionQueue),
             isCompounding: true,
             expiration: block.timestamp
           }),
@@ -296,9 +295,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     {
       uint256[] memory indices = new uint256[](1);
       indices[0] = 1;
-      uint256[] memory hintPrevIds = new uint256[](1);
-      hintPrevIds[0] = 0;
-      orderPool.processOrders(indices, hintPrevIds);
+      orderPool.processOrders(indices, hintPrevIdsList);
     }
     vm.stopPrank();
 

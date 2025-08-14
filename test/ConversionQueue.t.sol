@@ -46,6 +46,10 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
   uint256 public tokenId2 = 2;
   uint256 public tokenId3 = 3;
 
+  // Helper conversion queues and hintPrevIds
+  address[] public conversionQueues;
+  uint256[] public hintPrevIds;
+
   function setupThreeMortgages() public {
     // Deal 600k of usdx to lender1 and have them deposit it into the origination pool
     _mintUsdx(lender1, 600_000e18);
@@ -83,6 +87,8 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
   function setUp() public override {
     super.setUp();
+    conversionQueues = [address(conversionQueue)];
+    hintPrevIds = [0];
   }
 
   function test_constructor() public view {
@@ -209,11 +215,11 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     // Have borrowers enqueue the mortgages into the conversion queue (must be done through the general manager)
     vm.deal(borrower1, mortgageGasFee);
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage{value: mortgageGasFee}(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage{value: mortgageGasFee}(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.deal(borrower2, mortgageGasFee);
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage{value: mortgageGasFee}(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage{value: mortgageGasFee}(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Borrower 1 redeems their mortgage
@@ -284,11 +290,11 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
     // Have borrowers enqueue the mortgages into the conversion queue (must be done through the general manager)
     vm.deal(borrower1, mortgageGasFee);
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage{value: mortgageGasFee}(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage{value: mortgageGasFee}(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.deal(borrower2, mortgageGasFee);
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage{value: mortgageGasFee}(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage{value: mortgageGasFee}(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Time passes that mortgage1 is foreclosed
@@ -343,13 +349,13 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
     // Have borrowers enqueue the mortgages into the conversion queue (must be done through the general manager)
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower3);
-    generalManager.enqueueMortgage(3, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(3, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Validate that the conversion queue has 3 mortgages
@@ -376,13 +382,13 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
     // Have borrowers enqueue the mortgages into the conversion queue (must be done through the general manager)
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower3);
-    generalManager.enqueueMortgage(3, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(3, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Validate that the conversion queue has 3 mortgages
@@ -448,10 +454,10 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
     // Have borrower1 and borrower2 enqueue their $100k and $200k mortgages into the conversion queue (must be done through the general manager)
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Validate that the conversion queue has 2 mortgages
@@ -560,10 +566,10 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
     // Have borrower1 and borrower2 enqueue their $100k and $200k mortgages into the conversion queue (must be done through the general manager)
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Validate that the conversion queue has 2 mortgages
@@ -603,10 +609,10 @@ contract ConversionQueueTest is BaseTest, ILenderQueueEvents, IConversionQueueEv
 
     // Have borrower1 and borrower2 enqueue their $100k and $200k mortgages into the conversion queue (must be done through the general manager)
     vm.startPrank(borrower1);
-    generalManager.enqueueMortgage(1, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(1, conversionQueues, hintPrevIds);
     vm.stopPrank();
     vm.startPrank(borrower2);
-    generalManager.enqueueMortgage(2, address(conversionQueue), 0);
+    generalManager.enqueueMortgage(2, conversionQueues, hintPrevIds);
     vm.stopPrank();
 
     // Validate that the conversion queue has 2 mortgages
