@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import {IMultiTokenVault} from "./interfaces/IMultiTokenVault/IMultiTokenVault.sol";
 import {Context} from "@openzeppelin/contracts/utils/Context.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
@@ -12,7 +11,6 @@ import {EnumerableSet} from "@openzeppelin/contracts/utils/structs/EnumerableSet
 import {IRebasingERC20, RebasingERC20} from "./RebasingERC20.sol";
 import {SharesMath} from "./libraries/SharesMath.sol";
 import {Roles} from "./libraries/Roles.sol";
-import {Constants} from "./libraries/Constants.sol";
 
 /**
  * @title MultiTokenVault
