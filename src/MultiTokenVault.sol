@@ -26,9 +26,10 @@ contract MultiTokenVault is Context, ERC165, AccessControl, RebasingERC20, IMult
   // Storage Variables
   /// @dev The set of supported tokens
   EnumerableSet.AddressSet internal supportedTokens;
-  /// @notice The cap for each supported token
-  /// @return The cap for the token
-  mapping(address => uint16) public cap;
+  /**
+   * @inheritdoc IMultiTokenVault
+   */
+  mapping(address => uint256) public maximumCap;
 
   /**
    * @notice Constructor
@@ -44,16 +45,15 @@ contract MultiTokenVault is Context, ERC165, AccessControl, RebasingERC20, IMult
   }
 
   /**
-   * @dev Enforces the relative minting cap for a token
+   * @dev Enforces the maximum cap for a token
    * @param token The token to enforce the cap for
    */
   modifier enforceCaps(address token) {
     _;
     if (!hasRole(Roles.IGNORE_CAP_ROLE, _msgSender())) {
       uint256 scaledTokenAmount = convertAmount(token, IERC20(token).balanceOf(address(this)));
-      uint256 proportion = Math.mulDiv(Constants.BPS, scaledTokenAmount, _totalSupply());
-      if (proportion > cap[token]) {
-        revert CapExceeded(token, proportion, cap[token]);
+      if (scaledTokenAmount > maximumCap[token]) {
+        revert MaxmimumCapExceeded(token, scaledTokenAmount, maximumCap[token]);
       }
     }
   }
@@ -83,8 +83,8 @@ contract MultiTokenVault is Context, ERC165, AccessControl, RebasingERC20, IMult
     // Add the token to the supported tokens
     supportedTokens.add(token);
 
-    // Set the default of the token to 100%
-    cap[token] = 1e4;
+    // Set the default of the token to maximum cap
+    maximumCap[token] = type(uint256).max;
 
     // Emit the event
     emit TokenAdded(token);
@@ -103,7 +103,7 @@ contract MultiTokenVault is Context, ERC165, AccessControl, RebasingERC20, IMult
     supportedTokens.remove(token);
 
     // Delete the token cap
-    delete cap[token];
+    delete maximumCap[token];
 
     // Emit the event
     emit TokenRemoved(token);
@@ -127,22 +127,17 @@ contract MultiTokenVault is Context, ERC165, AccessControl, RebasingERC20, IMult
   /**
    * @inheritdoc IMultiTokenVault
    */
-  function setCap(address token, uint16 capBps) external override onlyRole(Roles.SUPPORTED_TOKEN_ROLE) {
-    // Check that the cap is valid (must be between 0% and 100%)
-    if (capBps > 1e4) {
-      revert InvalidCap(capBps);
-    }
-
+  function setMaximumCap(address token, uint256 _maximumCap) external override onlyRole(Roles.SUPPORTED_TOKEN_ROLE) {
     // Check that the token is supported
     if (!isTokenSupported(token)) {
       revert TokenNotSupported(token);
     }
 
-    // Set the cap
-    cap[token] = capBps;
+    // Set the maximum cap
+    maximumCap[token] = _maximumCap;
 
     // Emit the event
-    emit CapUpdated(token, capBps);
+    emit MaximumCapSet(token, _maximumCap);
   }
 
   /**
