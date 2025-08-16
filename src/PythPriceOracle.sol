@@ -6,12 +6,12 @@ import {IPyth} from "@pythnetwork/IPyth.sol";
 import {PythStructs} from "@pythnetwork/PythStructs.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+
 /**
  * @title PythPriceOracle
  * @author SocksNFlops
  * @notice The PythPriceOracle contract is a contract that tracks the price of a given asset to determine the trigger price for conversions.
  */
-
 contract PythPriceOracle is IPriceOracle {
   using SafeCast for int64;
 
@@ -42,8 +42,7 @@ contract PythPriceOracle is IPriceOracle {
    */
   uint256 public immutable maxConfidence;
   /**
-   * @notice The number of decimals for the collateral
-   * @return collateralDecimals The number of decimals for the collateral
+   * @inheritdoc IPriceOracle
    */
   uint8 public immutable collateralDecimals;
 

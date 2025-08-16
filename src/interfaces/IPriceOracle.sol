@@ -8,8 +8,8 @@ pragma solidity ^0.8.20;
  */
 interface IPriceOracle {
   /**
-   * @notice Returns the collateral decimals
-   * @return The collateral decimals
+   * @notice The number of decimals for the collateral
+   * @return collateralDecimals The number of decimals for the collateral
    */
   function collateralDecimals() external view returns (uint8);
 

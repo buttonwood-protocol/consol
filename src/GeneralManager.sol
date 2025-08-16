@@ -30,6 +30,7 @@ import {IOriginationPoolDeployCallback} from "./interfaces/IOriginationPoolDeplo
 import {ISubConsol} from "./interfaces/ISubConsol/ISubConsol.sol";
 import {Roles} from "./libraries/Roles.sol";
 import {Constants} from "./libraries/Constants.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
  * @title GeneralManager
@@ -54,6 +55,7 @@ contract GeneralManager is
    * @param _penaltyRate Late payment penalty rate in basis points (BPS)
    * @param _refinanceRate Refinancing fee rate in basis points (BPS)
    * @param _conversionPremiumRate Conversion premium rate in basis points (BPS)
+   * @param _priceSpread Price spread in basis points (BPS)
    * @param _insuranceFund Address of the insurance fund
    * @param _interestRateOracle Address of the interest rate oracle contract
    * @param _originationPoolScheduler Address of the origination pool scheduler contract
@@ -73,6 +75,7 @@ contract GeneralManager is
     uint16 _penaltyRate;
     uint16 _refinanceRate;
     uint16 _conversionPremiumRate;
+    uint16 _priceSpread;
     address _insuranceFund;
     address _interestRateOracle;
     address _originationPoolScheduler;
@@ -113,6 +116,7 @@ contract GeneralManager is
    * @param penaltyRate_ The penalty rate
    * @param refinanceRate_ The refinancing rate
    * @param conversionPremiumRate_ The conversion premium rate
+   * @param priceSpread_ The price spread
    * @param insuranceFund_ The address of the insurance fund
    * @param interestRateOracle_ The address of the interest rate oracle
    */
@@ -123,11 +127,19 @@ contract GeneralManager is
     uint16 penaltyRate_,
     uint16 refinanceRate_,
     uint16 conversionPremiumRate_,
+    uint16 priceSpread_,
     address insuranceFund_,
     address interestRateOracle_
   ) internal onlyInitializing {
     __GeneralManager_init_unchained(
-      usdx_, consol_, penaltyRate_, refinanceRate_, conversionPremiumRate_, insuranceFund_, interestRateOracle_
+      usdx_,
+      consol_,
+      penaltyRate_,
+      refinanceRate_,
+      conversionPremiumRate_,
+      priceSpread_,
+      insuranceFund_,
+      interestRateOracle_
     );
   }
 
@@ -138,6 +150,7 @@ contract GeneralManager is
    * @param penaltyRate_ The penalty rate
    * @param refinanceRate_ The refinancing rate
    * @param conversionPremiumRate_ The conversion premium rate
+   * @param priceSpread_ The price spread
    * @param insuranceFund_ The address of the insurance fund
    * @param interestRateOracle_ The address of the interest rate oracle
    */
@@ -148,6 +161,7 @@ contract GeneralManager is
     uint16 penaltyRate_,
     uint16 refinanceRate_,
     uint16 conversionPremiumRate_,
+    uint16 priceSpread_,
     address insuranceFund_,
     address interestRateOracle_
   ) internal onlyInitializing {
@@ -157,6 +171,7 @@ contract GeneralManager is
     $._penaltyRate = penaltyRate_;
     $._refinanceRate = refinanceRate_;
     $._conversionPremiumRate = conversionPremiumRate_;
+    $._priceSpread = priceSpread_;
     $._insuranceFund = insuranceFund_;
     $._interestRateOracle = interestRateOracle_;
     // Give Consol approval to spend the USDX from the GeneralManager
@@ -170,6 +185,7 @@ contract GeneralManager is
    * @param penaltyRate_ The penalty rate
    * @param refinanceRate_ The refinancing rate
    * @param conversionPremiumRate_ The conversion premium rate
+   * @param priceSpread_ The price spread
    * @param insuranceFund_ The address of the insurance fund
    * @param interestRateOracle_ The address of the interest rate oracle
    */
@@ -179,11 +195,19 @@ contract GeneralManager is
     uint16 penaltyRate_,
     uint16 refinanceRate_,
     uint16 conversionPremiumRate_,
+    uint16 priceSpread_,
     address insuranceFund_,
     address interestRateOracle_
   ) external initializer {
     __GeneralManager_init(
-      usdx_, consol_, penaltyRate_, refinanceRate_, conversionPremiumRate_, insuranceFund_, interestRateOracle_
+      usdx_,
+      consol_,
+      penaltyRate_,
+      refinanceRate_,
+      conversionPremiumRate_,
+      priceSpread_,
+      insuranceFund_,
+      interestRateOracle_
     );
     _grantRole(Roles.DEFAULT_ADMIN_ROLE, _msgSender());
   }
@@ -673,6 +697,21 @@ contract GeneralManager is
   /**
    * @inheritdoc IGeneralManager
    */
+  function setPriceSpread(uint16 priceSpread_) external onlyRole(Roles.DEFAULT_ADMIN_ROLE) {
+    emit PriceSpreadSet(_getGeneralManagerStorage()._priceSpread, priceSpread_);
+    _getGeneralManagerStorage()._priceSpread = priceSpread_;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
+  function priceSpread() external view returns (uint16) {
+    return _getGeneralManagerStorage()._priceSpread;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
   function conversionQueues(uint256 tokenId) public view returns (address[] memory) {
     return _getGeneralManagerStorage()._conversionQueues[tokenId];
   }
@@ -689,9 +728,14 @@ contract GeneralManager is
     view
     returns (uint256 cost, uint8 collateralDecimals)
   {
+    // Fetch storage
+    GeneralManagerStorage storage $ = _getGeneralManagerStorage();
+
     // Calculate the cost of the collateral
-    (cost, collateralDecimals) =
-      IPriceOracle(_getGeneralManagerStorage()._priceOracles[collateral]).cost(collateralAmount);
+    (cost, collateralDecimals) = IPriceOracle($._priceOracles[collateral]).cost(collateralAmount);
+
+    // Add the price spread to the cost
+    cost = Math.mulDiv(cost, 1e4 + $._priceSpread, 1e4);
   }
 
   /**
@@ -769,6 +813,7 @@ contract GeneralManager is
    * @param orderAmounts The order amounts
    * @param baseRequest The base request for the mortgage
    * @param conversionQueueList The addresses of the conversion queues to use
+   * @param requiredGasFee The required gas fee
    * @param expansion Whether the request is a new mortgage creation or a balance sheet expansion
    */
   function _sendOrder(
@@ -777,6 +822,7 @@ contract GeneralManager is
     OrderAmounts memory orderAmounts,
     BaseRequest calldata baseRequest,
     address[] memory conversionQueueList,
+    uint256 requiredGasFee,
     bool expansion
   ) internal {
     // Fetch storage
@@ -796,7 +842,7 @@ contract GeneralManager is
     }
 
     // Send the order to the order pool
-    IOrderPool($._orderPool).sendOrder{value: _calculateRequiredGasFee(true, mortgageParams.tokenId)}(
+    IOrderPool($._orderPool).sendOrder{value: requiredGasFee}(
       baseRequest.originationPools,
       borrowAmounts,
       conversionQueueList,
@@ -814,6 +860,7 @@ contract GeneralManager is
    * @param collateral The address of the collateral token
    * @param subConsol The address of the subConsol contract
    * @param conversionQueueList The addresses of the conversion queues to use
+   * @param requiredGasFee The required gas fee
    * @param hasPaymentPlan Whether the mortgage has a payment plan
    * @param expansion Whether the request is a new mortgage creation or a balance sheet expansion
    */
@@ -823,6 +870,7 @@ contract GeneralManager is
     address collateral,
     address subConsol,
     address[] memory conversionQueueList,
+    uint256 requiredGasFee,
     bool hasPaymentPlan,
     bool expansion
   ) internal {
@@ -845,7 +893,7 @@ contract GeneralManager is
       _prepareOrder(tokenId, baseRequest, collateral, subConsol, hasPaymentPlan);
 
     // Send the order to the order pool
-    _sendOrder(borrowAmounts, mortgageParams, orderAmounts, baseRequest, conversionQueueList, expansion);
+    _sendOrder(borrowAmounts, mortgageParams, orderAmounts, baseRequest, conversionQueueList, requiredGasFee, expansion);
   }
 
   /**
@@ -886,6 +934,7 @@ contract GeneralManager is
       creationRequest.collateral,
       creationRequest.subConsol,
       creationRequest.conversionQueues,
+      requiredGasFee,
       creationRequest.hasPaymentPlan,
       false
     );
@@ -926,6 +975,7 @@ contract GeneralManager is
       mortgagePosition.collateral,
       mortgagePosition.subConsol,
       conversionQueues(expansionRequest.tokenId),
+      requiredGasFee,
       mortgagePosition.hasPaymentPlan,
       true
     );

@@ -60,6 +60,7 @@ contract DeployAllTest is Test {
     vm.setEnv("PENALTY_RATE", "200");
     vm.setEnv("REFINANCE_RATE", "300");
     vm.setEnv("CONVERSION_PREMIUM_RATE", "5000");
+    vm.setEnv("PRICE_SPREAD", "100");
     vm.setEnv("SUPPORTED_PERIOD_TERMS_LENGTH", "2");
     vm.setEnv("SUPPORTED_PERIOD_TERM_0", "36");
     vm.setEnv("SUPPORTED_PERIOD_TERM_1", "60");
