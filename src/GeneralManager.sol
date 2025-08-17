@@ -735,7 +735,7 @@ contract GeneralManager is
     (cost, collateralDecimals) = IPriceOracle($._priceOracles[collateral]).cost(collateralAmount);
 
     // Add the price spread to the cost
-    cost = Math.mulDiv(cost, 1e4 + $._priceSpread, 1e4);
+    cost = Math.mulDiv(cost, Constants.BPS + $._priceSpread, Constants.BPS);
   }
 
   /**
