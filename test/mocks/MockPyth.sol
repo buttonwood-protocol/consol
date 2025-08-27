@@ -11,6 +11,7 @@ import {PythStructs} from "@pythnetwork/PythStructs.sol";
 contract MockPyth {
   /// @notice A mapping of price ids to prices
   mapping(bytes32 => PythStructs.Price) prices;
+  uint256 updateFee = 0.01e18;
 
   /**
    * @notice Set the price for a given price id
@@ -28,10 +29,14 @@ contract MockPyth {
     price = prices[priceId];
   }
 
+  function setUpdateFee(uint256 newUpdateFee) external {
+    updateFee = newUpdateFee;
+  }
+
   /// @notice Returns the required fee to update an array of price updates.
   /// @param updateData Array of price update data.
   /// @return feeAmount The required fee in Wei.
   function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount) {
-    return 0.01e18;
+    return updateFee;
   }
 }
