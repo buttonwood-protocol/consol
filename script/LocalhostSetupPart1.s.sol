@@ -48,8 +48,8 @@ contract LocalhostSetupPart1 is BaseScript {
     originationPool2 =
       IOriginationPool(originationPoolScheduler.deployOriginationPool(originationPoolScheduler.configIdAt(2)));
 
-    // Mint 132_010 USDToken0 (+30k for extra og funds)
-    usdToken0.mint(address(deployerAddress), 132_010 * 1e6);
+    // Mint 152_010 USDToken0 (+50k for extra og funds)
+    usdToken0.mint(address(deployerAddress), 152_010 * 1e6);
 
     // Deposit the 132_010 USDToken0 into USDX
     usdToken0.approve(address(usdx), 132_010 * 1e6);

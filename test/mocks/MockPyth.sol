@@ -27,4 +27,11 @@ contract MockPyth {
   function getPriceNoOlderThan(bytes32 priceId, uint256) external view returns (PythStructs.Price memory price) {
     price = prices[priceId];
   }
+
+  /// @notice Returns the required fee to update an array of price updates.
+  /// @param updateData Array of price update data.
+  /// @return feeAmount The required fee in Wei.
+  function getUpdateFee(bytes[] calldata updateData) external view returns (uint256 feeAmount) {
+    return 0.01e18;
+  }
 }
