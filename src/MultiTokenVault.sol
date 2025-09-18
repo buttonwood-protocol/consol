@@ -169,11 +169,11 @@ contract MultiTokenVault is Context, ERC165, AccessControl, RebasingERC20, IMult
       revert AmountTooSmall(amount);
     }
 
-    // Mint the tokens to the user
-    _mint(_msgSender(), mAmount);
-
     // Transfer the tokens to the MultiTokenVault
     IERC20(token).safeTransferFrom(_msgSender(), address(this), amount);
+
+    // Mint the tokens to the user
+    _mint(_msgSender(), mAmount);
 
     // Emit the deposit event
     emit Deposit(_msgSender(), token, amount, mAmount);
