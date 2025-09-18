@@ -128,7 +128,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     MortgageParams memory mortgageParams,
     uint256 expiration,
     bool expansion
-  ) external payable onlyGeneralManager returns (uint256 index) {
+  ) external payable onlyGeneralManager nonReentrant returns (uint256 index) {
     // Validate that msg.value is greater than or equal to the gas fee
     if (msg.value < gasFee) {
       revert InsufficientGasFee(gasFee, msg.value);
