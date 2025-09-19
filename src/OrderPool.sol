@@ -71,6 +71,7 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
 
   /**
    * @notice Constructor for the OrderPool
+   * @param nativeWrapper_ The address of the native wrapper contract
    * @param generalManager_ The address of the GeneralManager
    * @param admin_ The address of the admin
    */

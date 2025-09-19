@@ -52,6 +52,7 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
    * @param asset_ The address of the asset to convert
    * @param decimals_ The number of decimals of the asset
    * @param consol_ The address of the Consol contract
+   * @param nativeWrapper_ The address of the native wrapper contract
    * @param generalManager_ The address of the GeneralManager contract
    * @param admin_ The address of the admin
    */
