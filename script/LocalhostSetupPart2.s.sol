@@ -14,7 +14,7 @@ import {ContractAddresses} from "../test/utils/ContractAddresses.sol";
 import {IOrderPool} from "../src/interfaces/IOrderPool/IOrderPool.sol";
 import {CreationRequest, BaseRequest} from "../src/types/orders/OrderRequests.sol";
 import {IConversionQueue} from "../src/interfaces/IConversionQueue/IConversionQueue.sol";
-import {IWHYPE9} from "./external/IWHYPE9.sol";
+import {IWHYPE9} from "../src/external/IWHYPE9.sol";
 
 contract LocalhostSetupPart2 is BaseScript {
   MockERC20 public usdToken0;

@@ -14,6 +14,7 @@ import {IMortgageNFT} from "../src/interfaces/IMortgageNFT/IMortgageNFT.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {OrderAmounts} from "../src/types/orders/OrderAmounts.sol";
 import {Roles} from "../src/libraries/Roles.sol";
+import {IWHYPE9} from "../src/external/IWHYPE9.sol";
 
 contract OrderPoolTest is BaseTest, IOrderPoolEvents {
   // Helper conversion queues and hintPrevIdsList
@@ -554,11 +555,14 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Record the fulfiller's current native balance
     uint256 fulfillerEndingNativeBalance = address(fulfiller).balance;
 
-    // Validate that the fulfiller's native balance has increased by BOTH the order pool gas fee and the mortgage gas fee
+    // Validate that the fulfiller's native balance has increased by only the order pool gas fee
+    assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
+
+    // Validate that the borrower has received their mortgage gas fee back in the native wrapper
     assertEq(
-      fulfillerEndingNativeBalance,
-      fulfillerStartingNativeBalance + orderPoolGasFee + mortgageGasFee,
-      "Native balance mismatch"
+      IWHYPE9(address(whype)).balanceOf(borrower),
+      mortgageGasFee,
+      "Borrower should have received their mortgage gas fee back in the native wrapper"
     );
 
     // Validate that the borrower has received their collateral back

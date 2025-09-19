@@ -21,6 +21,9 @@ import {IPausable} from "./interfaces/IPausable/IPausable.sol";
 import {ERC165} from "@openzeppelin/contracts/utils/introspection/ERC165.sol";
 import {MortgageStatus} from "./types/enums/MortgageStatus.sol";
 import {IMortgageNFT} from "./interfaces/IMortgageNFT/IMortgageNFT.sol";
+import {IWHYPE9} from "./external/IWHYPE9.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
  * @title ConversionQueue
@@ -29,7 +32,12 @@ import {IMortgageNFT} from "./interfaces/IMortgageNFT/IMortgageNFT.sol";
  */
 contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
   using MortgageMath for MortgagePosition;
+  using SafeERC20 for IERC20;
 
+  /**
+   * @inheritdoc IConversionQueue
+   */
+  address public immutable override nativeWrapper;
   /**
    * @inheritdoc IConversionQueue
    */
@@ -47,9 +55,15 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
    * @param generalManager_ The address of the GeneralManager contract
    * @param admin_ The address of the admin
    */
-  constructor(address asset_, uint8 decimals_, address consol_, address generalManager_, address admin_)
-    LenderQueue(asset_, consol_, admin_)
-  {
+  constructor(
+    address asset_,
+    uint8 decimals_,
+    address consol_,
+    address nativeWrapper_,
+    address generalManager_,
+    address admin_
+  ) LenderQueue(asset_, consol_, admin_) {
+    nativeWrapper = nativeWrapper_;
     generalManager = generalManager_;
     decimals = decimals_;
   }
@@ -124,11 +138,9 @@ contract ConversionQueue is LenderQueue, MortgageQueue, IConversionQueue {
       // Fetch the mortgage owner
       address mortgageOwner = IMortgageNFT(loanManager.nft()).ownerOf(mortgageTokenId);
 
-      // Send the collected gas fees to the mortgageOwner
-      (bool success,) = mortgageOwner.call{value: collectedGasFees}("");
-      if (!success) {
-        revert FailedToWithdrawNativeGas(collectedGasFees);
-      }
+      // Send the collected gas fees to the mortgageOwner via the native wrapper
+      IWHYPE9(nativeWrapper).deposit{value: collectedGasFees}();
+      IERC20(nativeWrapper).safeTransfer(mortgageOwner, collectedGasFees);
     }
 
     // Insert the mortgage into the mortgage queue

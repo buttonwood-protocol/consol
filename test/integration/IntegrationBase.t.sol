@@ -21,6 +21,7 @@ import {ILenderQueue} from "../../src/interfaces/ILenderQueue/ILenderQueue.sol";
 import {IConversionQueue} from "../../src/interfaces/IConversionQueue/IConversionQueue.sol";
 import {StaticInterestRateOracle} from "../../src/StaticInterestRateOracle.sol";
 import {IProcessor} from "../../src/interfaces/IProcessor.sol";
+import {IWHYPE9} from "../../src/external/IWHYPE9.sol";
 
 /**
  * @title IntegrationBaseTest
@@ -35,6 +36,7 @@ abstract contract IntegrationBaseTest is DeployAllTest {
   address public rando = makeAddr("rando");
   address public attacker = makeAddr("attacker");
   string public mortgageId = "mozzarella-sauce";
+  IWHYPE9 public whype;
   IERC20Metadata public btc;
   IERC20Metadata public usdt;
   IUSDX public usdx;
@@ -69,7 +71,7 @@ abstract contract IntegrationBaseTest is DeployAllTest {
   function setUp() public virtual override(DeployAllTest) {
     super.setUp();
     deployAll.run();
-
+    whype = IWHYPE9(deployAll.nativeWrapper());
     btc = deployAll.collateralTokens(1);
     usdt = deployAll.usdTokens(0);
     usdx = deployAll.usdx();

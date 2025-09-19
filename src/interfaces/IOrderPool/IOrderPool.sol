@@ -12,6 +12,12 @@ import {OrderAmounts} from "../../types/orders/OrderAmounts.sol";
  */
 interface IOrderPool is IOrderPoolEvents, IOrderPoolErrors {
   /**
+   * @notice Get the native token wrapper contract (whype/weth/etc).
+   * @return The address of the native token wrapper contract
+   */
+  function nativeWrapper() external view returns (address);
+
+  /**
    * @notice Returns the affiliated general manager address that is allowed to submit purchase orders.
    * @return The general manager address
    */

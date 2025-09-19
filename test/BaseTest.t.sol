@@ -40,6 +40,8 @@ import {IProcessor} from "../src/interfaces/IProcessor.sol";
 import {QueueProcessor} from "../src/QueueProcesssor.sol";
 import {Roles} from "../src/libraries/Roles.sol";
 import {MockPyth} from "@pythnetwork/MockPyth.sol";
+import {IWHYPE9} from "../src/external/IWHYPE9.sol";
+import {MockWrapper} from "./mocks/MockWrapper.sol";
 
 contract BaseTest is Test {
   using OPoolConfigIdLibrary for OPoolConfigId;
@@ -53,6 +55,7 @@ contract BaseTest is Test {
   address public balanceSheetExpander = makeAddr("balanceSheetExpander");
   address public pauser = makeAddr("pauser");
   // Tokens
+  IWHYPE9 public whype;
   IERC20 public usdt;
   IUSDX public usdx;
   ForfeitedAssetsPool public forfeitedAssetsPool;
@@ -162,7 +165,12 @@ contract BaseTest is Test {
 
   function _createConversionQueue() internal {
     conversionQueue = new ConversionQueue(
-      address(wbtc), IERC20Metadata(address(wbtc)).decimals(), address(consol), address(generalManager), admin
+      address(wbtc),
+      IERC20Metadata(address(wbtc)).decimals(),
+      address(consol),
+      address(whype),
+      address(generalManager),
+      admin
     );
 
     // Have the admin grant the consol's withdraw role to the conversion queue contract
@@ -219,7 +227,7 @@ contract BaseTest is Test {
   }
 
   function _createOrderPool() internal {
-    orderPool = new OrderPool(address(generalManager), admin);
+    orderPool = new OrderPool(address(whype), address(generalManager), admin);
     vm.startPrank(admin);
     // Grant the orderPool's fulfillment role to the fulfiller
     orderPool.grantRole(Roles.FULFILLMENT_ROLE, fulfiller);
@@ -376,6 +384,9 @@ contract BaseTest is Test {
     skip((31557600) * 55); // Skip 55 years into the future
     // Create USDX
     _createUsdx();
+    // Create whype
+    whype = new MockWrapper("Wrapped HYPE", "WHYPE", 18);
+    vm.label(address(whype), "WHYPE");
     // Create the forfeited assets pool
     forfeitedAssetsPool = new ForfeitedAssetsPool("Forfeited Assets Pool", "fAssets", admin);
     // Create the btc-subConsol

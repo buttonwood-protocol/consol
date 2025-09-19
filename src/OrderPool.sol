@@ -15,6 +15,7 @@ import {OriginationParameters} from "./types/orders/OriginationParameters.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Roles} from "./libraries/Roles.sol";
 import {IConversionQueue} from "./interfaces/IConversionQueue/IConversionQueue.sol";
+import {IWHYPE9} from "./external/IWHYPE9.sol";
 
 /**
  * @title PurchasePool
@@ -25,6 +26,10 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
   using SafeERC20 for IERC20;
 
   // State Variables
+  /**
+   * @inheritdoc IOrderPool
+   */
+  address public immutable override nativeWrapper;
   /**
    * @inheritdoc IOrderPool
    */
@@ -69,7 +74,8 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
    * @param generalManager_ The address of the GeneralManager
    * @param admin_ The address of the admin
    */
-  constructor(address generalManager_, address admin_) {
+  constructor(address nativeWrapper_, address generalManager_, address admin_) {
+    nativeWrapper = nativeWrapper_;
     generalManager = generalManager_;
     usdx = IGeneralManager(generalManager_).usdx();
     consol = IGeneralManager(generalManager_).consol();
@@ -204,8 +210,9 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       // Cancel the mortgage request
       IGeneralManager(generalManager).burnMortgageNFT(order.mortgageParams.tokenId);
 
-      // Collected the mortgage gas fee
-      collectedGasFee += order.mortgageGasFee;
+      // Refund the mortgage gas fee to the borrower via the native wrapper
+      IWHYPE9(nativeWrapper).deposit{value: order.mortgageGasFee}();
+      IERC20(nativeWrapper).safeTransfer(order.mortgageParams.owner, order.mortgageGasFee);
 
       // Emit the PurchaseOrderExpired event
       emit PurchaseOrderExpired(index);

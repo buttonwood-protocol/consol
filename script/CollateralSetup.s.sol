@@ -6,12 +6,14 @@ import {MockERC20} from "../test/mocks/MockERC20.sol";
 import {MockGatedERC20} from "../test/mocks/MockGatedERC20.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {BaseScript} from "./BaseScript.s.sol";
+import {IWHYPE9} from "../src/external/IWHYPE9.sol";
 
 contract CollateralSetup is BaseScript {
   using Strings for uint256;
 
   IERC20Metadata[] public collateralTokens;
   IERC20Metadata[] public usdTokens;
+  IWHYPE9 public nativeWrapper;
 
   function setUp() public virtual override {
     BaseScript.setUp();
@@ -82,5 +84,13 @@ contract CollateralSetup is BaseScript {
       addressList[i] = address(usdTokens[i]);
     }
     json = vm.serializeAddress(objectKey, "usdAddresses", addressList);
+  }
+
+  function setNativeWrapper() public {
+    nativeWrapper = IWHYPE9(vm.envAddress("NATIVE_WRAPPER"));
+  }
+
+  function logNativeWrapper(string memory objectKey) public returns (string memory json) {
+    json = vm.serializeAddress(objectKey, "nativeWrapper", address(nativeWrapper));
   }
 }
