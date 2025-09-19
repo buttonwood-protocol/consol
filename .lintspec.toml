@@ -1,6 +1,6 @@
 [lintspec]
 paths = []
-exclude = []
+exclude = ["src/external"]
 inheritdoc = false
 notice_or_dev = false
 skip_version_detection = false

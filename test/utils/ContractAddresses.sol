@@ -12,11 +12,12 @@ struct ContractAddresses {
   address interestRateOracleAddress;
   address loanManagerAddress;
   address mortgageNFTAddress;
+  address nativeWrapper;
   address nftMetadataGeneratorAddress;
   address orderPoolAddress;
   address originationPoolSchedulerAddress;
   address[] priceOracles;
-  address processorAddress;
+  address processor;
   address pythAddress;
   address[] subConsolAddresses;
   address[] usdAddresses;

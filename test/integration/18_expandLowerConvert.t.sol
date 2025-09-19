@@ -11,6 +11,7 @@ import {MortgageMath} from "../../src/libraries/MortgageMath.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Roles} from "../../src/libraries/Roles.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {IWHYPE9} from "../../src/external/IWHYPE9.sol";
 
 /**
  * @title Integration_18_ExpandLowerConvertTest
@@ -28,6 +29,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
 
   function _validateBalances(
     uint256 hyperStrategyBalance,
+    uint256 hyperStrategyWrapperBalance,
     uint256 fulfillerBalance,
     uint256 conversionQueueBalance,
     uint256 orderPoolBalance,
@@ -38,6 +40,11 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
       hyperstrategy.balance,
       hyperStrategyBalance,
       string.concat(indexStr, " hyperstrategy should have hyperStrategyBalance native tokens left")
+    );
+    assertEq(
+      IWHYPE9(address(whype)).balanceOf(hyperstrategy),
+      hyperStrategyWrapperBalance,
+      string.concat(indexStr, " hyperstrategy should have hyperStrategyWrapperBalance wrapped native tokens left")
     );
     assertEq(
       fulfiller.balance,
@@ -114,7 +121,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     vm.deal(address(hyperstrategy), 0.02e18);
 
     // Validate the balances [1]
-    _validateBalances(0.02e18, 0, 0, 0, 1);
+    _validateBalances(0.02e18, 0, 0, 0, 0, 1);
 
     // Hyperstrategy requests a compounding mortgage
     {
@@ -143,7 +150,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     }
 
     // Validate the balances [2]
-    _validateBalances(0, 0, 0, 0.02e18, 2);
+    _validateBalances(0, 0, 0, 0, 0.02e18, 2);
 
     // Fulfiller approves the order pool to take his 1 btc that he's selling
     vm.startPrank(fulfiller);
@@ -156,7 +163,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     vm.stopPrank();
 
     // Validate the balances [3]
-    _validateBalances(0, 0.01e18, 0.01e18, 0, 3);
+    _validateBalances(0, 0, 0.01e18, 0.01e18, 0, 3);
 
     // Validate that Hyperstrategy has the mortgageNFT
     assertEq(mortgageNFT.ownerOf(1), address(hyperstrategy));
@@ -254,7 +261,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     vm.deal(address(hyperstrategy), 0.02e18);
 
     // Validate the balances [4]
-    _validateBalances(0.02e18, 0.01e18, 0.01e18, 0, 4);
+    _validateBalances(0.02e18, 0, 0.01e18, 0.01e18, 0, 4);
 
     // Hyperstrategy requests a balance sheet expansion of their existing mortgage
     {
@@ -279,7 +286,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     }
 
     // Validate the balances [5]
-    _validateBalances(0, 0.01e18, 0.01e18, 0.02e18, 5);
+    _validateBalances(0, 0, 0.01e18, 0.01e18, 0.02e18, 5);
 
     // Fulfiller approves the order pool to take his 1 btc that he's selling
     vm.startPrank(fulfiller);
@@ -296,7 +303,7 @@ contract Integration_18_ExpandLowerConvertTest is IntegrationBaseTest {
     vm.stopPrank();
 
     // Validate the balances [6]
-    _validateBalances(0.01e18, 0.02e18, 0.01e18, 0, 6);
+    _validateBalances(0, 0.01e18, 0.02e18, 0.01e18, 0, 6);
 
     // Validate the mortgagePosition has been updated correctly
     mortgagePosition = loanManager.getMortgagePosition(1);

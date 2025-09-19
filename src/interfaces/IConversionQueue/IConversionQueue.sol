@@ -13,6 +13,12 @@ import {IConversionQueueErrors} from "./IConversionQueueErrors.sol";
  */
 interface IConversionQueue is IMortgageQueue, ILenderQueue, IConversionQueueEvents, IConversionQueueErrors {
   /**
+   * @notice Get the native token wrapper contract (whype/weth/etc).
+   * @return The address of the native token wrapper contract
+   */
+  function nativeWrapper() external view returns (address);
+
+  /**
    * @notice Get the GeneralManager contract.
    * @return The address of the GeneralManager contract
    */

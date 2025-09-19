@@ -20,6 +20,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     setupOrDeployCollaterals();
     // Deploy USD Tokens
     setupOrDeployUSDTokens();
+    // Set the native wrapper
+    setNativeWrapper();
     // Deploy USDX
     deployUSDX();
     // Deploy ForfeitedAssetsPool
@@ -105,6 +107,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     json = logCollaterals(obj);
     // Log the usd token addresses
     json = logUSDTokens(obj);
+    // Log the native wrapper address
+    json = logNativeWrapper(obj);
     // Log the usdx address
     json = logUSDX(obj);
     // Log the forfeited assets pool address

@@ -32,6 +32,7 @@ contract DeployAllTest is Test {
     vm.setEnv("ADMIN_ADDRESS_1", vm.toString(admin2));
     vm.setEnv("IS_TEST", "True");
     vm.setEnv("IS_TESTNET", "False");
+    vm.setEnv("NATIVE_WRAPPER", vm.toString(whypeAddress));
     vm.setEnv("COLLATERAL_TOKEN_LENGTH", "2");
     vm.setEnv("COLLATERAL_ADDRESS_0", vm.toString(0x5555555555555555555555555555555555555555));
     vm.setEnv("COLLATERAL_NAME_0", "Wrapped HYPE");

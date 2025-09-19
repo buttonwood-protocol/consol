@@ -177,7 +177,8 @@ contract Integration_4_OrderExpiresTest is IntegrationBaseTest {
     assertEq(address(generalManager).balance, 0, "GeneralManager should have 0 balance");
     assertEq(address(conversionQueue).balance, 0, "ConversionQueue should have 0 balance");
     assertEq(address(orderPool).balance, 0, "OrderPool should have 0 balance");
-    assertEq(address(fulfiller).balance, 0.02e18, "Fulfiller should have 0.02 native tokens");
+    assertEq(address(fulfiller).balance, 0.01e18, "Fulfiller should have 0.01 native tokens");
+    assertEq(whype.balanceOf(address(borrower)), 0.01e18, "Borrower should have 0.01 wrapped native tokens");
 
     // Check that assets have been returned to the borrower
     assertEq(usdx.balanceOf(address(borrower)), 102_010e18, "Borrower should have 102_010 usdx");
