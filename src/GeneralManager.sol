@@ -1090,10 +1090,9 @@ contract GeneralManager is
 
     // Deposit sufficient USDX to mint `returnAmount - amount` of Consol to pay the originationFee
     {
-      uint256 depositAmount =
-        IConsol($._consol).convertUnderlying($._usdx, returnAmount - IConsol($._consol).balanceOf(address(this)));
-      if (depositAmount > 0) {
-        IConsol($._consol).deposit($._usdx, depositAmount);
+      uint256 consolBalance = IConsol($._consol).balanceOf(address(this));
+      if (consolBalance < returnAmount) {
+        IConsol($._consol).deposit($._usdx, IConsol($._consol).convertUnderlying($._usdx, returnAmount - consolBalance));
       }
     }
 
