@@ -537,9 +537,9 @@ contract GeneralManagerTest is BaseTest {
     generalManager.requestMortgageCreation(creationRequest);
   }
 
-  function test_requestMortgageCreation_shouldRevertIfDuplicateOriginationPool(
-    CreationRequest memory createRequestSeed
-  ) public {
+  function test_requestMortgageCreation_shouldRevertIfDuplicateOriginationPool(CreationRequest memory createRequestSeed)
+    public
+  {
     // Fuzz the create request and duplicate the origination pool
     CreationRequest memory creationRequest = fuzzCreateRequestFromSeed(createRequestSeed);
     address oldOriginationPool = creationRequest.base.originationPools[0];
@@ -548,9 +548,7 @@ contract GeneralManagerTest is BaseTest {
     creationRequest.base.originationPools[1] = oldOriginationPool;
 
     // Attempt to request a mortgage with a duplicate origination pool
-    vm.expectRevert(
-      abi.encodeWithSelector(IGeneralManagerErrors.DuplicateOriginationPool.selector, oldOriginationPool)
-    );
+    vm.expectRevert(abi.encodeWithSelector(IGeneralManagerErrors.DuplicateOriginationPool.selector, oldOriginationPool));
     generalManager.requestMortgageCreation(creationRequest);
   }
 
