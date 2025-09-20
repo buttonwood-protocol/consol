@@ -612,8 +612,9 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Ensure the amountBorrowed is greater than $1 and less than the origination pool limit
     amountBorrowed = bound(amountBorrowed, 1e18, originationPool.poolLimit());
 
-    // The entire amount of USDX being borrowed is being paid to the fulfiller
-    orderAmounts.purchaseAmount = amountBorrowed;
+    // The entire amount of USDX being borrowed is being paid to the fulfiller (excluding what is being paid to the origination pool)
+    orderAmounts.purchaseAmount =
+      (2 * amountBorrowed) - IOriginationPool(originationPool).calculateReturnAmount(amountBorrowed);
 
     // Ensure that the Purchase Order's expiration timestamp is after the origination pool's deploy phase (when the process call will be made)
     expiration = bound(
