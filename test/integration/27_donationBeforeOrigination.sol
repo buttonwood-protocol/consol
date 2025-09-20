@@ -146,7 +146,6 @@ contract Integration_27_DonationBeforeOriginationTest is IntegrationBaseTest {
     // Confirm that rando has 1_000_001 Consol with the same number of shares
     assertEq(consol.balanceOf(address(rando)), 1_000_001e18, "consol.balanceOf(rando)");
     assertEq(consol.sharesOf(address(rando)), oldRandoShares, "consol.sharesOf(rando)");
-    
 
     // Fulfiller approves the order pool to take his 2 btc that he's selling
     vm.startPrank(fulfiller);

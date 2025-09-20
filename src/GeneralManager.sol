@@ -1038,7 +1038,7 @@ contract GeneralManager is
    * @dev amount = amountBorrowed
    * @dev returnAmount = amountBorrowed + originationFee
    */
-  function originationPoolDeployCallback(uint256 amount, uint256 returnAmount, bytes calldata data)
+  function originationPoolDeployCallback(uint256, uint256 returnAmount, bytes calldata data)
     external
     onlyRegisteredOriginationPool
   {
@@ -1085,7 +1085,8 @@ contract GeneralManager is
 
     // Deposit sufficient USDX to mint `returnAmount - amount` of Consol to pay the originationFee
     {
-      uint256 depositAmount = IConsol($._consol).convertUnderlying($._usdx, returnAmount - IConsol($._consol).balanceOf(address(this)));
+      uint256 depositAmount =
+        IConsol($._consol).convertUnderlying($._usdx, returnAmount - IConsol($._consol).balanceOf(address(this)));
       if (depositAmount > 0) {
         IConsol($._consol).deposit($._usdx, depositAmount);
       }
