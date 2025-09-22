@@ -229,7 +229,6 @@ contract Integration_11_ConversionRefinanceTest is IntegrationBaseTest {
       "btc.balanceOf(lender) should equal expectedCollateralConverted"
     );
 
-    // ToDo: FIX THIS
     // Validate that the mortgage position is still in the conversion queue
     assertEq(conversionQueue.mortgageHead(), mortgagePosition.tokenId, "mortgageHead");
     assertEq(conversionQueue.mortgageTail(), mortgagePosition.tokenId, "mortgageTail");
