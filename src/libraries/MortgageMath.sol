@@ -293,7 +293,7 @@ library MortgageMath {
     if (mortgagePosition.status != MortgageStatus.FORECLOSED) {
       return 0;
     }
-    return mortgagePosition.amountBorrowed - mortgagePosition.amountConverted - mortgagePosition.principalRemaining();
+    return mortgagePosition.amountPrior + mortgagePosition.convertPaymentToPrincipal(mortgagePosition.termPaid);
   }
 
   /**
