@@ -964,8 +964,7 @@ contract GeneralManager is
     onlyMortgageOwner(expansionRequest.tokenId)
   {
     // Calculate the required gas fee
-    uint256 requiredGasFee =
-      _calculateRequiredGasFee(true, conversionQueues(expansionRequest.tokenId));
+    uint256 requiredGasFee = _calculateRequiredGasFee(true, conversionQueues(expansionRequest.tokenId));
 
     // Check if the caller has sent enough gas and refund the surplus
     _checkSufficientGas(requiredGasFee);
