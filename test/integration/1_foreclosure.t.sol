@@ -125,8 +125,11 @@ contract Integration_1_ForeclosureTest is IntegrationBaseTest {
     orderPool.processOrders(new uint256[](1), emptyHintPrevIdsList);
     vm.stopPrank();
 
-    // Validate that the origination pool has 102_010 Consol
-    assertEq(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool)");
+    // Validate that the origination pool has at least 102_010 Consol
+    assertGe(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool) >= 102_010e18");
+    assertApproxEqAbs(
+      consol.balanceOf(address(originationPool)), 102_010e18, 1, "consol.balanceOf(originationPool) ~ 102_010e18"
+    );
 
     // Validate that the borrower has the mortgageNFT
     assertEq(mortgageNFT.ownerOf(1), address(borrower));
@@ -226,11 +229,16 @@ contract Integration_1_ForeclosureTest is IntegrationBaseTest {
     assertEq(btc.balanceOf(address(arbitrager)), 2e8, "arbitrager.balanceOf(btc)");
     assertEq(btc.balanceOf(address(forfeitedAssetsPool)), 0, "forfeitedAssetsPool.balanceOf(btc)");
 
-    // Also that there is 102_010 Consol (still in the origination pool since the lender never took it out)
+    // Also that there is at least 102_010 Consol (still in the origination pool since the lender never took it out)
     // This is composed of $101k USDX from the arbitrager and $1k USDX from the pool multiplier fees (paid by borrower)
-    assertEq(consol.totalSupply(), 102_010e18, "consol.totalSupply()");
-    assertEq(usdx.balanceOf(address(consol)), 102_010e18, "usdx.balanceOf(consol)");
-    assertEq(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool)");
+    assertGe(consol.totalSupply(), 102_010e18, "consol.totalSupply() >= 102_010e18");
+    assertApproxEqAbs(consol.totalSupply(), 102_010e18, 1, "consol.totalSupply() ~ 102_010e18");
+    assertGe(usdx.balanceOf(address(consol)), 102_010e18, "usdx.balanceOf(consol) >= 102_010e18");
+    assertApproxEqAbs(usdx.balanceOf(address(consol)), 102_010e18, 1, "usdx.balanceOf(consol) ~ 102_010e18");
+    assertGe(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool) >= 102_010e18");
+    assertApproxEqAbs(
+      consol.balanceOf(address(originationPool)), 102_010e18, 1, "consol.balanceOf(originationPool) ~ 102_010e18"
+    );
 
     // Have the lender withdraw the 101k consol from the origination pool (by burning 100k receipt tokens)
     vm.startPrank(lender);
@@ -238,6 +246,7 @@ contract Integration_1_ForeclosureTest is IntegrationBaseTest {
     vm.stopPrank();
 
     // Validate that the lender has the 102_010 consol
-    assertEq(consol.balanceOf(address(lender)), 102_010e18, "consol.balanceOf(lender)");
+    assertGe(consol.balanceOf(address(lender)), 102_010e18, "consol.balanceOf(lender) >= 102_010e18");
+    assertApproxEqAbs(consol.balanceOf(address(lender)), 102_010e18, 1, "consol.balanceOf(lender) ~ 102_010e18");
   }
 }

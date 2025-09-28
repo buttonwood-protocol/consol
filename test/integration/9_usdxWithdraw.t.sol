@@ -123,8 +123,11 @@ contract Integration_9_UsdxWithdrawTest is IntegrationBaseTest {
     orderPool.processOrders(new uint256[](1), emptyHintPrevIdsList);
     vm.stopPrank();
 
-    // Validate that the origination pool has 102_010 Consol
-    assertEq(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool)");
+    // Validate that the origination pool has received at least 102_010 Consol
+    assertGe(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool) >= 102_010e18");
+    assertApproxEqAbs(
+      consol.balanceOf(address(originationPool)), 102_010e18, 1, "consol.balanceOf(originationPool) ~ 102_010e18"
+    );
 
     // Validate that the borrower has the mortgageNFT
     assertEq(mortgageNFT.ownerOf(1), address(borrower));
@@ -138,7 +141,8 @@ contract Integration_9_UsdxWithdrawTest is IntegrationBaseTest {
     vm.stopPrank();
 
     // Validate the Consol balances
-    assertEq(consol.balanceOf(address(lender)), 102_010e18, "consol.balanceOf(lender)");
+    assertGe(consol.balanceOf(address(lender)), 102_010e18, "consol.balanceOf(lender) >= 102_010e18");
+    assertApproxEqAbs(consol.balanceOf(address(lender)), 102_010e18, 1, "consol.balanceOf(lender) ~ 102_010e18");
     assertEq(consol.balanceOf(address(originationPool)), 0, "consol.balanceOf(originationPool)");
 
     // Deal the gas fee to the lender

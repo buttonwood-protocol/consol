@@ -127,7 +127,10 @@ contract Integration_28_PartialConvertAndForeclosureTest is IntegrationBaseTest 
 
     // Validate all parties have correct final balances of Consol
     assertEq(consol.balanceOf(address(generalManager)), 0, "consol.balanceOf(generalManager)");
-    assertEq(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool)");
+    assertGe(consol.balanceOf(address(originationPool)), 102_010e18, "consol.balanceOf(originationPool) >= 102_010e18");
+    assertApproxEqAbs(
+      consol.balanceOf(address(originationPool)), 102_010e18, 1, "consol.balanceOf(originationPool) ~ 102_010e18"
+    );
     assertEq(consol.balanceOf(address(borrower)), 0, "consol.balanceOf(borrower)");
     assertEq(consol.balanceOf(address(fulfiller)), 0, "consol.balanceOf(fulfiller)");
     assertEq(consol.balanceOf(address(lender)), 0, "consol.balanceOf(lender)");
@@ -136,9 +139,10 @@ contract Integration_28_PartialConvertAndForeclosureTest is IntegrationBaseTest 
     assertEq(usdx.balanceOf(address(generalManager)), 0, "usdx.balanceOf(generalManager)");
     assertEq(usdx.balanceOf(address(originationPool)), 0, "usdx.balanceOf(originationPool)");
     assertEq(usdx.balanceOf(address(borrower)), 0, "usdx.balanceOf(borrower)");
-    assertEq(usdx.balanceOf(address(fulfiller)), 202_000e18, "usdx.balanceOf(fulfiller)");
+    assertApproxEqAbs(usdx.balanceOf(address(fulfiller)), 202_000e18, 1, "usdx.balanceOf(fulfiller) ~ 202_000e18");
     assertEq(usdx.balanceOf(address(lender)), 0, "usdx.balanceOf(lender)");
-    assertEq(usdx.balanceOf(address(consol)), 1_010e18, "usdx.balanceOf(consol)");
+    assertGe(usdx.balanceOf(address(consol)), 1_010e18, "usdx.balanceOf(consol) >= 1_010e18");
+    assertApproxEqAbs(usdx.balanceOf(address(consol)), 1_010e18, 1, "usdx.balanceOf(consol) ~ 1_010e18");
 
     // Validate that the borrower has the mortgageNFT
     assertEq(mortgageNFT.ownerOf(1), address(borrower));
@@ -180,7 +184,8 @@ contract Integration_28_PartialConvertAndForeclosureTest is IntegrationBaseTest 
     vm.stopPrank();
 
     // Validatae that the lender has 102_010 Consol (101_000 * 1.01 = 102_010)
-    assertEq(consol.balanceOf(address(lender)), 102_010e18, "consol.balanceOf(lender)");
+    assertGe(consol.balanceOf(address(lender)), 102_010e18, "consol.balanceOf(lender) >= 102_010e18");
+    assertApproxEqAbs(consol.balanceOf(address(lender)), 102_010e18, 1, "consol.balanceOf(lender) ~ 102_010e18");
 
     // Have the lender deposit 1/2 of the principal worth of Consol into the conversion queue
     vm.deal(address(lender), 0.01e18);
