@@ -1085,16 +1085,18 @@ contract GeneralManager is
       );
     }
 
-    // Deposit sufficient USDX to mint `returnAmount - amount` of Consol to pay the originationFee
+    // Deposit sufficient USDX to mint `returnAmount + 1` of Consol
     {
       uint256 consolBalance = IConsol($._consol).balanceOf(address(this));
-      if (consolBalance < returnAmount) {
-        IConsol($._consol).deposit($._usdx, IConsol($._consol).convertUnderlying($._usdx, returnAmount - consolBalance));
+      if (consolBalance < returnAmount + 1) {
+        IConsol($._consol).deposit(
+          $._usdx, IConsol($._consol).convertUnderlying($._usdx, returnAmount + 1 - consolBalance)
+        );
       }
     }
 
-    // Send entire balance of Consol back to the origination pool (GeneralManager should be empty otherwise)
-    IERC20($._consol).safeTransfer(_msgSender(), IConsol($._consol).balanceOf(address(this)));
+    // Send (returnAmount + 1) of Consol back to the origination pool to guarantee the originationPool receives at least returnAmount of Consol
+    IERC20($._consol).safeTransfer(_msgSender(), returnAmount + 1);
   }
 
   /**

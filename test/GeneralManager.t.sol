@@ -1459,13 +1459,13 @@ contract GeneralManagerTest is BaseTest {
       "Collateral should be transferred to SubConsol"
     );
 
-    // Validate that the origination fee was minted in Consol and sent to the origination pool
-    assertEq(
+    // Validate that the origination fee was minted in Consol and sent to the origination pool (should have at least the return amount)
+    assertGe(
       usdx.balanceOf(address(consol)),
       originationPool.calculateReturnAmount(amountBorrowed) - amountBorrowed,
       "Origination fee should be paid via USDX"
     );
-    assertEq(
+    assertGe(
       consol.balanceOf(address(originationPool)),
       originationPool.calculateReturnAmount(amountBorrowed),
       "amountBorrowed should be paid to the origination pool in Consol"
@@ -1581,13 +1581,13 @@ contract GeneralManagerTest is BaseTest {
       "Collateral should be transferred to SubConsol"
     );
 
-    // Validate that the origination fee was minted in Consol and sent to the origination pool
-    assertEq(
+    // Validate that the origination fee was minted in Consol and sent to the origination pool (should have at least the return amount)
+    assertGe(
       usdx.balanceOf(address(consol)),
       originationPool.calculateReturnAmount(amountBorrowed) - amountBorrowed,
       "Origination fee should be paid via USDX"
     );
-    assertEq(
+    assertGe(
       consol.balanceOf(address(originationPool)),
       originationPool.calculateReturnAmount(amountBorrowed),
       "amountBorrowed should be paid to the origination pool in Consol"
@@ -2389,13 +2389,13 @@ contract GeneralManagerTest is BaseTest {
       "The original and new collateral should be transferred to SubConsol"
     );
 
-    // Validate that the origination fee was minted in Consol and sent to the origination pool
-    assertEq(
+    // Validate that the origination fee was minted in Consol and sent to the origination pool (should have at least the return amount)
+    assertGe(
       usdx.balanceOf(address(consol)),
       creationReturnAmount - amountBorrowed + originationPool.calculateReturnAmount(amountIn) - amountIn,
       "Origination fee should be paid via USDX"
     );
-    assertEq(
+    assertGe(
       consol.balanceOf(address(originationPool)),
       originationPool.calculateReturnAmount(amountIn),
       "amountIn (+ origination fees) should be paid to the [SECOND] origination pool in Consol"

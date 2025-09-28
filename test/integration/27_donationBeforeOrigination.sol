@@ -189,7 +189,7 @@ contract Integration_27_DonationBeforeOriginationTest is IntegrationBaseTest {
     assertEq(uint8(mortgagePosition.status), uint8(MortgageStatus.ACTIVE), "[1] status");
 
     // Validate that the fulfiller has received close to the purchase amount
-    assertApproxEqAbs(usdx.balanceOf(address(fulfiller)), 202_000e18, 3, "usdx.balanceOf(fulfiller)");
+    assertApproxEqAbs(usdx.balanceOf(address(fulfiller)), 202_000e18, 4, "usdx.balanceOf(fulfiller)");
     // Precision Errors That Rounded Down:
     // 1. LoanManager minting Consol (lost 1 wei)
     // 2. GeneralManager using convertUnderlying to over-estimate the amount of USDX to fill in the gap (lost 1 wei)

@@ -711,10 +711,10 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Validate that the fulfiller's native balance has increased by only the order pool gas fee
     assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
 
-    // Validate that the fulfiller has sold the collateral and received the purchaseAmount
+    // Validate that the fulfiller has sold the collateral and approximately received the purchaseAmount
     assertEq(ERC20Mock(address(wbtc)).balanceOf(fulfiller), 0, "Fulfiller collateral balance mismatch");
-    assertEq(
-      ERC20Mock(address(usdx)).balanceOf(fulfiller), orderAmounts.purchaseAmount, "Fulfiller usdx balance mismatch"
+    assertApproxEqAbs(
+      ERC20Mock(address(usdx)).balanceOf(fulfiller), orderAmounts.purchaseAmount, 1, "Fulfiller usdx balance mismatch"
     );
 
     // Validate that the order was deleted
@@ -852,10 +852,10 @@ contract OrderPoolTest is BaseTest, IOrderPoolEvents {
     // Validate that the fulfiller's native balance has increased by only the order pool gas fee
     assertEq(fulfillerEndingNativeBalance, fulfillerStartingNativeBalance + orderPoolGasFee, "Native balance mismatch");
 
-    // Validate that the fulfiller has sold the collateral and received the purchaseAmount
+    // Validate that the fulfiller has sold the collateral and approximately received the purchaseAmount
     assertEq(ERC20Mock(address(wbtc)).balanceOf(fulfiller), 0, "Fulfiller collateral balance mismatch");
-    assertEq(
-      ERC20Mock(address(usdx)).balanceOf(fulfiller), orderAmounts.purchaseAmount, "Fulfiller usdx balance mismatch"
+    assertApproxEqAbs(
+      ERC20Mock(address(usdx)).balanceOf(fulfiller), orderAmounts.purchaseAmount, 1, "Fulfiller usdx balance mismatch"
     );
 
     // Validate that the order was deleted
