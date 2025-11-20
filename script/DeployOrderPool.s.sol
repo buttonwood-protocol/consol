@@ -45,7 +45,7 @@ contract DeployOrderPool is DeployGeneralManager {
     }
 
     // Renounce admin role // Disable for production
-    // IAccessControl(address(orderPool)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    IAccessControl(address(orderPool)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function logOrderPool(string memory objectKey) public returns (string memory json) {

@@ -82,7 +82,7 @@ contract DeployConsol is DeployUSDX, DeployForfeitedAssetsPool, DeploySubConsols
     Consol(address(consol)).grantRole(Roles.IGNORE_CAP_ROLE, address(generalManager));
 
     // Renounce roles // Disable for production
-    // Consol(address(consol)).renounceRole(Roles.SUPPORTED_TOKEN_ROLE, deployerAddress);
-    // Consol(address(consol)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    Consol(address(consol)).renounceRole(Roles.SUPPORTED_TOKEN_ROLE, deployerAddress);
+    Consol(address(consol)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 }

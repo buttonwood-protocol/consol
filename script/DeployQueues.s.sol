@@ -51,7 +51,7 @@ contract DeployQueues is DeployGeneralManager {
     UsdxQueue(address(usdxQueue)).setWithdrawalGasFee(usdxWithdrawalGasFee);
 
     // Renounce admin role // Disable for production
-    // UsdxQueue(address(usdxQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    UsdxQueue(address(usdxQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function deployForfeitedAssetsQueue() public {
@@ -70,7 +70,7 @@ contract DeployQueues is DeployGeneralManager {
     ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).setWithdrawalGasFee(forfeitedAssetsWithdrawalGasFee);
 
     // Renounce admin role // Disable for production
-    // ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function deployConversionQueues() public {
@@ -102,7 +102,7 @@ contract DeployQueues is DeployGeneralManager {
       conversionQueue.setWithdrawalGasFee(conversionWithdrawalGasFee);
 
       // Renounce admin role // Disable for production
-      // conversionQueue.renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+      conversionQueue.renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
 
       // Push to the array of collateralQueues
       conversionQueues.push(conversionQueue);

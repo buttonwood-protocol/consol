@@ -93,7 +93,7 @@ contract DeployGeneralManager is DeployPriceOracles, DeployConsol {
     }
 
     // Renounce the admin role from the broadcaster // Disable for production
-    // GeneralManager(address(generalManager)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    GeneralManager(address(generalManager)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function logGeneralManager(string memory objectKey) public returns (string memory json) {

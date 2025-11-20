@@ -62,9 +62,9 @@ contract LocalhostSetupPart1 is BaseScript {
     usdt0.approve(address(usdx), 132_010 * 1e6);
     usdx.deposit(address(usdt0), 132_010 * 1e6);
 
-    // Deposit the 5k USDX into the origination pool (+3k for extra og funds)
-    usdx.approve(address(originationPool0), 5_000 * 1e18);
-    originationPool0.deposit(5_000 * 1e18);
+    // Deposit the 50k USDX into the origination pool (+3k for extra og funds)
+    usdx.approve(address(originationPool0), 53_000 * 1e18);
+    originationPool0.deposit(53_000 * 1e18);
 
     // Stop broadcasting
     vm.stopBroadcast();

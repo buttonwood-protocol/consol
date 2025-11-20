@@ -41,8 +41,8 @@ contract DeployUSDX is CollateralSetup {
     }
 
     // Renounce roles // Disable for production
-    // MultiTokenVault(address(usdx)).renounceRole(Roles.SUPPORTED_TOKEN_ROLE, deployerAddress);
-    // USDX(address(usdx)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    MultiTokenVault(address(usdx)).renounceRole(Roles.SUPPORTED_TOKEN_ROLE, deployerAddress);
+    USDX(address(usdx)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function logUSDX(string memory objectKey) public returns (string memory json) {
