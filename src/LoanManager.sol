@@ -332,7 +332,6 @@ contract LoanManager is ILoanManager, ERC165, Context {
     mortgageExistsAndActive(tokenId)
     imposePenaltyBefore(tokenId)
     // solhint-disable-next-line no-empty-blocks
-
   {}
 
   /**
