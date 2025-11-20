@@ -75,8 +75,8 @@ contract DeployOriginationScheduler is DeployGeneralManager {
       OriginationPoolScheduler(address(originationPoolScheduler)).grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]);
     }
 
-    // Renounce the admin role from the deployer
-    OriginationPoolScheduler(address(originationPoolScheduler)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    // Renounce the admin role from the deployer // Disable for production
+    // OriginationPoolScheduler(address(originationPoolScheduler)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
   }
 
   function logOriginationPoolScheduler(string memory objectKey) public returns (string memory json) {

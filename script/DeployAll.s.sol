@@ -15,7 +15,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
   }
 
   function run() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
-    vm.startBroadcast(deployerPrivateKey);
+    vm.startBroadcast();
     // Deploy Collaterals
     setupOrDeployCollaterals();
     // Deploy USD Tokens
@@ -29,7 +29,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     // Deploy SubConsols
     deploySubConsols();
     // Deploy YieldStrategies
-    deployYieldStrategies();
+    // deployYieldStrategies(); // Disabled for production
     // Deploy Consol
     deployConsol();
     // Get or create the pyth oracle
@@ -39,7 +39,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     // Deploy PriceOracles that read from the PythOracle
     deployPriceOracles();
     // Deploy NFTMetadataGenerator
-    deployNFTMetadataGenerator();
+    // deployNFTMetadataGenerator(); // Disabled for production
     // Deploy GeneralManager
     deployGeneralManager();
     // Deploy Processor
@@ -58,6 +58,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     transferOriginationPoolSchedulerAdminRole();
     // Deploy LoanManager
     deployLoanManager();
+    // Set the Consol Usdx Maximum Cap
+    setConsolUsdxMaximumCap();
     // Grant admin/withdraw roles and renounce on Consol
     consolGrantRolesAndRenounce(
       address(loanManager), address(generalManager), usdxQueue, forfeitedAssetsQueue, conversionQueues
