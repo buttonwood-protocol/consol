@@ -331,8 +331,7 @@ contract LoanManager is ILoanManager, ERC165, Context {
     override
     mortgageExistsAndActive(tokenId)
     imposePenaltyBefore(tokenId)
-    // solhint-disable-next-line no-empty-blocks
-  {}
+  {} // solhint-disable-line no-empty-blocks
 
   /**
    * @inheritdoc ILoanManager
