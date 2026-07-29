@@ -1,0 +1,32 @@
+{
+  "transactions": [
+    {
+      "hash": null,
+      "transactionType": "CALL",
+      "contractName": "USDX",
+      "contractAddress": "0x22632c11c1b4ff37edb06ddc1d5bf9c4ca2132e5",
+      "function": "removeSupportedToken(address)",
+      "arguments": [
+        "0x111111a1a0667d36bD57c0A9f569b98057111111"
+      ],
+      "transaction": {
+        "from": "0xd7e86bd77784217324b4e94aedc68e5c8227ec2b",
+        "to": "0x22632c11c1b4ff37edb06ddc1d5bf9c4ca2132e5",
+        "gas": "0xe99f",
+        "value": "0x0",
+        "input": "0x76319190000000000000000000000000111111a1a0667d36bd57c0a9f569b98057111111",
+        "nonce": "0x147",
+        "chainId": "0x3e7"
+      },
+      "additionalContracts": [],
+      "isFixedGasLimit": false
+    }
+  ],
+  "receipts": [],
+  "libraries": [],
+  "pending": [],
+  "returns": {},
+  "timestamp": 1785293301373,
+  "chain": 999,
+  "commit": "d24b699"
+}
