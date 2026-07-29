@@ -41,16 +41,13 @@ contract DeployAllTest is Test {
     vm.setEnv("COLLATERAL_NAME_1", "Wrapped Bitcoin");
     vm.setEnv("COLLATERAL_SYMBOL_1", "WBTC");
     vm.setEnv("COLLATERAL_DECIMALS_1", "8");
-    vm.setEnv("USD_TOKEN_LENGTH", "3");
+    vm.setEnv("USD_TOKEN_LENGTH", "2");
     vm.setEnv("USD_NAME_0", "Tether USD");
     vm.setEnv("USD_SYMBOL_0", "USDT0");
     vm.setEnv("USD_DECIMALS_0", "6");
     vm.setEnv("USD_NAME_1", "USD Coin");
     vm.setEnv("USD_SYMBOL_1", "USDC");
     vm.setEnv("USD_DECIMALS_1", "6");
-    vm.setEnv("USD_NAME_2", "Hyper USD");
-    vm.setEnv("USD_SYMBOL_2", "USDH");
-    vm.setEnv("USD_DECIMALS_2", "6");
     vm.setEnv("USDX_NAME", "USDX");
     vm.setEnv("USDX_SYMBOL", "USDX");
     vm.setEnv("USDX_DECIMALS_OFFSET", "8");

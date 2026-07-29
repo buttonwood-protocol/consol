@@ -14,7 +14,6 @@ import {ContractAddresses} from "../test/utils/ContractAddresses.sol";
 contract LocalhostSetupPart1 is BaseScript {
   MockERC20 public usdt0;
   MockERC20 public usdc;
-  MockERC20 public usdh;
   IUSDX public usdx;
   IOriginationPoolScheduler public originationPoolScheduler;
   ILoanManager public loanManager;
@@ -34,7 +33,6 @@ contract LocalhostSetupPart1 is BaseScript {
 
     usdt0 = MockERC20(contractAddresses.usdAddresses[0]);
     usdc = MockERC20(contractAddresses.usdAddresses[1]);
-    usdh = MockERC20(contractAddresses.usdAddresses[2]);
     usdx = IUSDX(contractAddresses.usdxAddress);
     originationPoolScheduler = IOriginationPoolScheduler(contractAddresses.originationPoolSchedulerAddress);
     loanManager = ILoanManager(contractAddresses.loanManagerAddress);
@@ -54,9 +52,6 @@ contract LocalhostSetupPart1 is BaseScript {
 
     // Mint 10_000 USDC tokens
     usdc.mint(address(deployerAddress), 10_000 * 1e6);
-
-    // Mint 10_000 USDH tokens
-    usdh.mint(address(deployerAddress), 10_000 * 1e6);
 
     // Deposit the 132_010 USDToken0 into USDX
     usdt0.approve(address(usdx), 132_010 * 1e6);
