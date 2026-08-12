@@ -81,8 +81,8 @@ contract DeployConsol is DeployUSDX, DeployForfeitedAssetsPool, DeploySubConsols
     // Grant IGNORE_CAP_ROLE to the General Manager
     Consol(address(consol)).grantRole(Roles.IGNORE_CAP_ROLE, address(generalManager));
 
-    // Renounce roles // Disable for production
-    Consol(address(consol)).renounceRole(Roles.SUPPORTED_TOKEN_ROLE, deployerAddress);
-    Consol(address(consol)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    // Renounce the deployer's roles (skipped when the deployer must keep them; see BaseScript.renounceUnlessAdmin)
+    renounceUnlessAdmin(address(consol), Roles.SUPPORTED_TOKEN_ROLE);
+    renounceUnlessAdmin(address(consol), Roles.DEFAULT_ADMIN_ROLE);
   }
 }

@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import {IUSDX} from "../src/interfaces/IUSDX/IUSDX.sol";
 import {USDX} from "../src/USDX.sol";
 import {CollateralSetup} from "./CollateralSetup.s.sol";
-import {MultiTokenVault} from "../src/MultiTokenVault.sol";
 import {Roles} from "../src/libraries/Roles.sol";
 
 contract DeployUSDX is CollateralSetup {
@@ -40,9 +39,9 @@ contract DeployUSDX is CollateralSetup {
       USDX(address(usdx)).grantRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]);
     }
 
-    // Renounce roles // Disable for production
-    MultiTokenVault(address(usdx)).renounceRole(Roles.SUPPORTED_TOKEN_ROLE, deployerAddress);
-    USDX(address(usdx)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    // Renounce the deployer's roles (skipped when the deployer must keep them; see BaseScript.renounceUnlessAdmin)
+    renounceUnlessAdmin(address(usdx), Roles.SUPPORTED_TOKEN_ROLE);
+    renounceUnlessAdmin(address(usdx), Roles.DEFAULT_ADMIN_ROLE);
   }
 
   function logUSDX(string memory objectKey) public returns (string memory json) {

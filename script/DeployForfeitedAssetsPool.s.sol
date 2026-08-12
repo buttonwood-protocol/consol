@@ -43,7 +43,7 @@ contract DeployForfeitedAssetsPool is CollateralSetup {
     // Grant depositor role to loan manager
     ForfeitedAssetsPool(address(forfeitedAssetsPool)).grantRole(Roles.DEPOSITOR_ROLE, loanManager);
 
-    // Renounce admin role // Disable for production
-    ForfeitedAssetsPool(address(forfeitedAssetsPool)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    // Renounce the deployer's admin role (skipped when the deployer must keep it; see BaseScript.renounceUnlessAdmin)
+    renounceUnlessAdmin(address(forfeitedAssetsPool), Roles.DEFAULT_ADMIN_ROLE);
   }
 }
