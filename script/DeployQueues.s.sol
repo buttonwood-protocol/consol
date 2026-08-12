@@ -50,8 +50,8 @@ contract DeployQueues is DeployGeneralManager {
     // Set the withdrawal gas fee
     UsdxQueue(address(usdxQueue)).setWithdrawalGasFee(usdxWithdrawalGasFee);
 
-    // Renounce admin role // Disable for production
-    UsdxQueue(address(usdxQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    // Renounce the deployer's admin role (skipped when the deployer must keep it; see BaseScript.renounceUnlessAdmin)
+    renounceUnlessAdmin(address(usdxQueue), Roles.DEFAULT_ADMIN_ROLE);
   }
 
   function deployForfeitedAssetsQueue() public {
@@ -69,8 +69,8 @@ contract DeployQueues is DeployGeneralManager {
     // Set the withdrawal gas fee
     ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).setWithdrawalGasFee(forfeitedAssetsWithdrawalGasFee);
 
-    // Renounce admin role // Disable for production
-    ForfeitedAssetsQueue(address(forfeitedAssetsQueue)).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+    // Renounce the deployer's admin role (skipped when the deployer must keep it; see BaseScript.renounceUnlessAdmin)
+    renounceUnlessAdmin(address(forfeitedAssetsQueue), Roles.DEFAULT_ADMIN_ROLE);
   }
 
   function deployConversionQueues() public {
@@ -101,8 +101,8 @@ contract DeployQueues is DeployGeneralManager {
       conversionQueue.setMortgageGasFee(conversionMortgageGasFee);
       conversionQueue.setWithdrawalGasFee(conversionWithdrawalGasFee);
 
-      // Renounce admin role // Disable for production
-      conversionQueue.renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+      // Renounce the deployer's admin role (skipped when the deployer must keep it; see BaseScript.renounceUnlessAdmin)
+      renounceUnlessAdmin(address(conversionQueue), Roles.DEFAULT_ADMIN_ROLE);
 
       // Push to the array of collateralQueues
       conversionQueues.push(conversionQueue);

@@ -6,6 +6,8 @@ import {DeployOriginationScheduler} from "./DeployOriginationScheduler.s.sol";
 import {DeployLoanManager} from "./DeployLoanManager.s.sol";
 import {DeployOrderPool} from "./DeployOrderPool.s.sol";
 import {DeployQueues} from "./DeployQueues.s.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
+import {Roles} from "../src/libraries/Roles.sol";
 
 contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues {
   string public testAddressesFileSuffix;
@@ -83,6 +85,50 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
 
     // Log all of the addresses
     logAddresses();
+
+    // Verify that no intended admin was stripped and the deployer's admin state matches the renounce settings
+    assertRoleInvariants();
+  }
+
+  /**
+   * @notice Asserts the post-deploy role invariants on every access-controlled contract deployed by this script:
+   * every configured admin holds DEFAULT_ADMIN_ROLE, and the deployer holds it if and only if it is
+   * itself a configured admin.
+   */
+  function assertRoleInvariants() internal view {
+    assertContractRoleInvariants(address(usdx), "USDX");
+    assertContractRoleInvariants(address(consol), "Consol");
+    for (uint256 i = 0; i < subConsols.length; i++) {
+      assertContractRoleInvariants(address(subConsols[i]), string.concat("SubConsol #", vm.toString(i)));
+    }
+    assertContractRoleInvariants(address(forfeitedAssetsPool), "ForfeitedAssetsPool");
+    assertContractRoleInvariants(address(usdxQueue), "UsdxQueue");
+    assertContractRoleInvariants(address(forfeitedAssetsQueue), "ForfeitedAssetsQueue");
+    for (uint256 i = 0; i < conversionQueues.length; i++) {
+      assertContractRoleInvariants(address(conversionQueues[i]), string.concat("ConversionQueue #", vm.toString(i)));
+    }
+    assertContractRoleInvariants(address(orderPool), "OrderPool");
+    assertContractRoleInvariants(address(generalManager), "GeneralManager");
+    assertContractRoleInvariants(address(originationPoolScheduler), "OriginationPoolScheduler");
+  }
+
+  /**
+   * @notice Asserts the DEFAULT_ADMIN_ROLE invariants for a single access-controlled contract.
+   * @param target The access-controlled contract to check
+   * @param label A human-readable label identifying the contract in revert messages
+   */
+  function assertContractRoleInvariants(address target, string memory label) internal view {
+    for (uint256 i = 0; i < admins.length; i++) {
+      require(
+        IAccessControl(target).hasRole(Roles.DEFAULT_ADMIN_ROLE, admins[i]),
+        string.concat(label, ": admin missing (", vm.toString(admins[i]), ")")
+      );
+    }
+    bool expectedDeployerAdmin = deployerIsAdmin;
+    require(
+      IAccessControl(target).hasRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress) == expectedDeployerAdmin,
+      string.concat(label, ": deployer admin state does not match the expected renounce outcome")
+    );
   }
 
   function getPath() public view returns (string memory path) {

@@ -51,8 +51,8 @@ contract DeploySubConsols is CollateralSetup {
       // Grant the accounting role to the corresponding conversion queue (they're ordered the same)
       SubConsol(address(subConsols[i])).grantRole(Roles.ACCOUNTING_ROLE, address(conversionQueues[i]));
 
-      // Renounce admin role // Disable for production
-      SubConsol(address(subConsols[i])).renounceRole(Roles.DEFAULT_ADMIN_ROLE, deployerAddress);
+      // Renounce the deployer's admin role (skipped when the deployer must keep it; see BaseScript.renounceUnlessAdmin)
+      renounceUnlessAdmin(address(subConsols[i]), Roles.DEFAULT_ADMIN_ROLE);
     }
   }
 
