@@ -31,18 +31,21 @@ contract DeployMockStockTokens is Script {
   }
 
   function run() public {
-    string[10] memory symbols = ["NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "META", "GOOGL", "SPY", "GME", "QQQ"];
+    // "m" prefix marks these as mocks: Robinhood ships real faucet Stock Tokens on this
+    // testnet (TSLA, AMZN, NFLX, AMD, PLTR), so unprefixed symbols would collide with,
+    // and be mistaken for, genuine issuer tokens.
+    string[10] memory symbols = ["mNVDA", "mTSLA", "mAAPL", "mMSFT", "mAMZN", "mMETA", "mGOOGL", "mSPY", "mGME", "mQQQ"];
     string[10] memory names = [
-      "NVIDIA",
-      "Tesla",
-      "Apple",
-      "Microsoft",
-      "Amazon",
-      "Meta Platforms",
-      "Alphabet",
-      "SPDR S&P 500 ETF",
-      "GameStop",
-      "Invesco QQQ Trust"
+      "Mock NVIDIA",
+      "Mock Tesla",
+      "Mock Apple",
+      "Mock Microsoft",
+      "Mock Amazon",
+      "Mock Meta Platforms",
+      "Mock Alphabet",
+      "Mock SPDR S&P 500 ETF",
+      "Mock GameStop",
+      "Mock Invesco QQQ Trust"
     ];
 
     address[10] memory deployed;
