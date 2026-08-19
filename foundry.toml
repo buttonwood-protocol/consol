@@ -37,7 +37,6 @@ tab_width = 2
 
 [etherscan]
   hyperliquid = { key = "${API_KEY_ETHERSCAN}" }
-  robinhood-testnet = { key = "${API_KEY_ETHERSCAN}", url = "https://explorer.testnet.chain.robinhood.com/api", chain = 46630 }
 
 [rpc_endpoints]
   hyperliquid = "https://rpc.hyperliquid.xyz/evm"
