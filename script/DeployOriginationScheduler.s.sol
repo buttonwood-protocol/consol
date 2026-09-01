@@ -56,16 +56,16 @@ contract DeployOriginationScheduler is DeployGeneralManager {
       OriginationPoolScheduler(address(originationPoolScheduler))
         .addConfig(
           OriginationPoolConfig({
-          namePrefix: namePrefix,
-          symbolPrefix: symbolPrefix,
-          consol: address(consol),
-          usdx: address(usdx),
-          depositPhaseDuration: depositPhaseDuration,
-          deployPhaseDuration: deployPhaseDuration,
-          defaultPoolLimit: defaultPoolLimit,
-          poolLimitGrowthRateBps: poolLimitGrowthRateBps,
-          poolMultiplierBps: poolMultiplierBps
-        })
+            namePrefix: namePrefix,
+            symbolPrefix: symbolPrefix,
+            consol: address(consol),
+            usdx: address(usdx),
+            depositPhaseDuration: depositPhaseDuration,
+            deployPhaseDuration: deployPhaseDuration,
+            defaultPoolLimit: defaultPoolLimit,
+            poolLimitGrowthRateBps: poolLimitGrowthRateBps,
+            poolMultiplierBps: poolMultiplierBps
+          })
         );
     }
   }
