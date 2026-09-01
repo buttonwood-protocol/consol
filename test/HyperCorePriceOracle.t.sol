@@ -39,7 +39,7 @@ contract HyperCorePriceOracleTest is Test {
     _setPerpAssetInfo(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS);
     _setOraclePx(HYPE_PERP_INDEX, 810760);
     _setMarkPx(HYPE_PERP_INDEX, 810320);
-    oracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 0);
+    oracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 0, "HYPE");
   }
 
   function test_constructor() public view {
@@ -53,12 +53,25 @@ contract HyperCorePriceOracleTest is Test {
   function test_constructor_invalidSzDecimals(uint8 szDecimals) public {
     szDecimals = uint8(bound(szDecimals, 7, type(uint8).max));
     vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.InvalidSzDecimals.selector, szDecimals));
-    new HyperCorePriceOracle(HYPE_PERP_INDEX, szDecimals, 8, 0);
+    new HyperCorePriceOracle(HYPE_PERP_INDEX, szDecimals, 8, 0, "HYPE");
   }
 
   function test_constructor_szDecimalsMismatch() public {
     vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.SzDecimalsMismatch.selector, 3, HYPE_SZ_DECIMALS));
-    new HyperCorePriceOracle(HYPE_PERP_INDEX, 3, 8, 0);
+    new HyperCorePriceOracle(HYPE_PERP_INDEX, 3, 8, 0, "HYPE");
+  }
+
+  function test_constructor_coinMismatch() public {
+    vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.CoinMismatch.selector, "BTC", "HYPE"));
+    new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 0, "BTC");
+  }
+
+  // A mistyped index that happens to share size decimals must still be rejected
+  function test_constructor_coinMismatch_sameSzDecimals() public {
+    uint32 wrongIndex = 132;
+    _setPerpAssetInfoCoin(wrongIndex, "ICP", HYPE_SZ_DECIMALS);
+    vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.CoinMismatch.selector, "HYPE", "ICP"));
+    new HyperCorePriceOracle(wrongIndex, HYPE_SZ_DECIMALS, 8, 0, "HYPE");
   }
 
   function test_constructor_perpAssetInfoFailure(uint32 perpIndex) public {
@@ -67,7 +80,7 @@ contract HyperCorePriceOracleTest is Test {
     vm.expectRevert(
       abi.encodeWithSelector(HyperCorePriceOracle.PrecompileCallFailed.selector, PERP_ASSET_INFO_PRECOMPILE)
     );
-    new HyperCorePriceOracle(perpIndex, 2, 8, 0);
+    new HyperCorePriceOracle(perpIndex, 2, 8, 0, "HYPE");
   }
 
   function test_constructor_nonBooleanOnlyIsolated() public {
@@ -78,7 +91,7 @@ contract HyperCorePriceOracleTest is Test {
     response[191] = 0x10;
     MockHyperCorePrecompile(PERP_ASSET_INFO_PRECOMPILE).setResponse(perpIndex, response);
     _setOraclePx(perpIndex, 360960);
-    HyperCorePriceOracle testnetOracle = new HyperCorePriceOracle(perpIndex, 2, 18, 0);
+    HyperCorePriceOracle testnetOracle = new HyperCorePriceOracle(perpIndex, 2, 18, 0, "HYPE");
     assertEq(testnetOracle.price(), 360960e14, "Price mismatch");
   }
 
@@ -87,7 +100,7 @@ contract HyperCorePriceOracleTest is Test {
     _setPerpAssetInfo(perpIndex, 0);
     // 0 size decimals means the raw price has 6 decimals: 81076000 is $81.076
     _setOraclePx(perpIndex, 81076000);
-    HyperCorePriceOracle sampleOracle = new HyperCorePriceOracle(perpIndex, 0, 8, 0);
+    HyperCorePriceOracle sampleOracle = new HyperCorePriceOracle(perpIndex, 0, 8, 0, "HYPE");
     assertEq(sampleOracle.priceScale(), 1e12, "Price scale mismatch");
     assertEq(sampleOracle.price(), 81_076e15, "Price mismatch");
   }
@@ -102,7 +115,7 @@ contract HyperCorePriceOracleTest is Test {
     _setPerpAssetInfo(perpIndex, 5);
     // 5 size decimals means the raw price has 1 decimal: 8110 is $811.0
     _setOraclePx(perpIndex, 8110);
-    HyperCorePriceOracle sampleOracle = new HyperCorePriceOracle(perpIndex, 5, 18, 0);
+    HyperCorePriceOracle sampleOracle = new HyperCorePriceOracle(perpIndex, 5, 18, 0, "HYPE");
     assertEq(sampleOracle.priceScale(), 1e17, "Price scale mismatch");
     assertEq(sampleOracle.price(), 811e18, "Price mismatch");
   }
@@ -114,7 +127,7 @@ contract HyperCorePriceOracleTest is Test {
   }
 
   function test_price_deviationGuard_withinBand() public {
-    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50);
+    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50, "HYPE");
     _setOraclePx(HYPE_PERP_INDEX, 1000000);
 
     // A deviation of exactly the maximum (50 bps) is allowed
@@ -125,7 +138,7 @@ contract HyperCorePriceOracleTest is Test {
   }
 
   function test_price_deviationGuard_markAbove() public {
-    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50);
+    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50, "HYPE");
     _setOraclePx(HYPE_PERP_INDEX, 1000000);
     _setMarkPx(HYPE_PERP_INDEX, 1005100);
     vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.MaxDeviationExceeded.selector, 51, 50));
@@ -133,7 +146,7 @@ contract HyperCorePriceOracleTest is Test {
   }
 
   function test_price_deviationGuard_markBelow() public {
-    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50);
+    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50, "HYPE");
     _setOraclePx(HYPE_PERP_INDEX, 1000000);
     _setMarkPx(HYPE_PERP_INDEX, 994900);
     vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.MaxDeviationExceeded.selector, 51, 50));
@@ -149,7 +162,7 @@ contract HyperCorePriceOracleTest is Test {
   }
 
   function test_price_deviationGuard_markPxFailure() public {
-    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50);
+    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 8, 50, "HYPE");
     MockHyperCorePrecompile(MARK_PX_PRECOMPILE).setConsumeAllGas(true);
     vm.expectRevert(abi.encodeWithSelector(HyperCorePriceOracle.PrecompileCallFailed.selector, MARK_PX_PRECOMPILE));
     guardedOracle.price();
@@ -209,7 +222,11 @@ contract HyperCorePriceOracleTest is Test {
   }
 
   function _setPerpAssetInfo(uint32 perpIndex, uint8 szDecimals) internal {
-    bytes memory response = abi.encode(PerpAssetInfo("HYPE", 52, szDecimals, 10, false));
+    _setPerpAssetInfoCoin(perpIndex, "HYPE", szDecimals);
+  }
+
+  function _setPerpAssetInfoCoin(uint32 perpIndex, string memory coin, uint8 szDecimals) internal {
+    bytes memory response = abi.encode(PerpAssetInfo(coin, 52, szDecimals, 10, false));
     MockHyperCorePrecompile(PERP_ASSET_INFO_PRECOMPILE).setResponse(perpIndex, response);
   }
 }
@@ -252,7 +269,7 @@ contract HyperCorePriceOracleForkTest is Test {
     if (!_forkOrSkip()) return;
 
     // The constructor validates the size decimals against the real perp asset info precompile
-    HyperCorePriceOracle oracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 18, 0);
+    HyperCorePriceOracle oracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 18, 0, "HYPE");
     uint256 price = oracle.price();
 
     // Sanity bounds for HYPE in USD (18 decimals)
@@ -268,8 +285,8 @@ contract HyperCorePriceOracleForkTest is Test {
     if (!_forkOrSkip()) return;
 
     // A 100% band should never trip under normal market conditions
-    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 18, 10_000);
-    HyperCorePriceOracle unguardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 18, 0);
+    HyperCorePriceOracle guardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 18, 10_000, "HYPE");
+    HyperCorePriceOracle unguardedOracle = new HyperCorePriceOracle(HYPE_PERP_INDEX, HYPE_SZ_DECIMALS, 18, 0, "HYPE");
     assertEq(guardedOracle.price(), unguardedOracle.price(), "Price mismatch");
   }
 }

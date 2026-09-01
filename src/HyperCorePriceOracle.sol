@@ -48,6 +48,12 @@ contract HyperCorePriceOracle is IPriceOracle {
    * @return BPS The basis points denominator
    */
   uint256 public constant BPS = 10_000;
+  /**
+   * @notice The shortest valid perp asset info response: one word of struct offset, five words of struct head,
+   * and one word of coin length
+   * @return MIN_PERP_ASSET_INFO_LENGTH The shortest valid perp asset info response in bytes
+   */
+  uint256 public constant MIN_PERP_ASSET_INFO_LENGTH = 224;
 
   /**
    * @notice The HyperCore perp index of the tracked asset
@@ -76,6 +82,24 @@ contract HyperCorePriceOracle is IPriceOracle {
   uint256 public immutable priceScale;
 
   /**
+   * @notice The perp asset info reported by HyperCore. The numeric fields are declared as uint256 rather than
+   * their narrow on-chain types so that decoding accepts any word HyperCore returns; a narrow type would reject a
+   * word whose high bits are not cleared
+   * @param coin The perp's coin symbol
+   * @param marginTableId The perp's margin table id
+   * @param szDecimals The perp's size decimals
+   * @param maxLeverage The perp's maximum leverage
+   * @param onlyIsolated Whether the perp is isolated-margin only
+   */
+  struct PerpAssetInfo {
+    string coin;
+    uint256 marginTableId;
+    uint256 szDecimals;
+    uint256 maxLeverage;
+    uint256 onlyIsolated;
+  }
+
+  /**
    * @notice The error thrown when the size decimals exceed the maximum perp price decimals
    * @param szDecimals The size decimals
    */
@@ -86,6 +110,12 @@ contract HyperCorePriceOracle is IPriceOracle {
    * @param reportedSzDecimals The size decimals reported by HyperCore
    */
   error SzDecimalsMismatch(uint8 szDecimals, uint256 reportedSzDecimals);
+  /**
+   * @notice The error thrown when the coin does not match the perp asset info reported by HyperCore
+   * @param expectedCoin The coin passed to the constructor
+   * @param reportedCoin The coin reported by HyperCore
+   */
+  error CoinMismatch(string expectedCoin, string reportedCoin);
   /**
    * @notice The error thrown when a precompile call fails or returns malformed data
    * @param precompile The address of the precompile
@@ -110,8 +140,16 @@ contract HyperCorePriceOracle is IPriceOracle {
    * @param collateralDecimals_ The number of decimals for the collateral
    * @param maxDeviationBps_ The maximum deviation between the mark price and the oracle price in basis points. A
    * value of zero disables the deviation guard
+   * @param expectedCoin_ The coin symbol the perp index must report. Validated against the perp asset info and
+   * then discarded
    */
-  constructor(uint32 perpIndex_, uint8 szDecimals_, uint8 collateralDecimals_, uint16 maxDeviationBps_) {
+  constructor(
+    uint32 perpIndex_,
+    uint8 szDecimals_,
+    uint8 collateralDecimals_,
+    uint16 maxDeviationBps_,
+    string memory expectedCoin_
+  ) {
     if (szDecimals_ > MAX_PX_DECIMALS) {
       revert InvalidSzDecimals(szDecimals_);
     }
@@ -123,20 +161,21 @@ contract HyperCorePriceOracle is IPriceOracle {
     // multiplying by 10^(USD_DECIMALS - (MAX_PX_DECIMALS - szDecimals))
     priceScale = 10 ** (USD_DECIMALS - MAX_PX_DECIMALS + szDecimals_);
 
-    // Validate the configured size decimals against the perp asset info reported by HyperCore
+    // Validate the configured perp against the perp asset info reported by HyperCore. The response is
+    // abi.encode(PerpAssetInfo): one word of struct offset, then the struct itself
     (bool success, bytes memory data) =
       PERP_ASSET_INFO_PRECOMPILE.staticcall{gas: PRECOMPILE_GAS_LIMIT}(abi.encode(perpIndex_));
-    if (!success || data.length < 128) {
+    if (!success || data.length < MIN_PERP_ASSET_INFO_LENGTH) {
       revert PrecompileCallFailed(PERP_ASSET_INFO_PRECOMPILE);
     }
-    // The perp asset info is encoded as a struct (string coin, uint32 marginTableId, uint8 szDecimals,
-    // uint8 maxLeverage, bool onlyIsolated). Only the head of the encoding is read here: word 0 is the struct
-    // offset, word 1 is the coin string offset, word 2 is marginTableId, and word 3 is szDecimals. The full struct
-    // is deliberately not decoded because HyperCore encodes onlyIsolated as a non-boolean word for some assets,
-    // which abi.decode rejects
-    (,,, uint256 reportedSzDecimals) = abi.decode(data, (uint256, uint256, uint256, uint256));
-    if (reportedSzDecimals != szDecimals_) {
-      revert SzDecimalsMismatch(szDecimals_, reportedSzDecimals);
+    PerpAssetInfo memory assetInfo = abi.decode(data, (PerpAssetInfo));
+    if (assetInfo.szDecimals != szDecimals_) {
+      revert SzDecimalsMismatch(szDecimals_, assetInfo.szDecimals);
+    }
+    // Size decimals alone do not identify a perp: many perps share a value, so a mistyped index can match on
+    // decimals and price a different asset. The coin symbol pins the index to one asset
+    if (keccak256(bytes(assetInfo.coin)) != keccak256(bytes(expectedCoin_))) {
+      revert CoinMismatch(expectedCoin_, assetInfo.coin);
     }
   }
 
