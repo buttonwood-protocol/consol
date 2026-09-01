@@ -127,7 +127,8 @@ contract MockRouter is Context {
       // If non-compounding, need to collect the full mortgage amount in USDX + commission fee
       (paymentAmount, collateralDecimals) = IPriceOracle(
           IGeneralManager(generalManager).priceOracles(creationRequest.collateral)
-        ).cost(creationRequest.base.collateralAmounts[0]);
+        )
+        .cost(creationRequest.base.collateralAmounts[0]);
       usdxCollected =
         IOriginationPool(creationRequest.base.originationPools[0]).calculateReturnAmount(paymentAmount / 2);
       if (paymentAmount % 2 == 1) {
