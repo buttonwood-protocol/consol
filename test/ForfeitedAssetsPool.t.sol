@@ -335,6 +335,7 @@ contract ForfeitedAssetsPoolTest is BaseTest {
   ) public {
     // Make sure the caller is a new address
     address caller = makeAddr(callerName);
+    vm.assume(caller != depositor && caller != receiver);
 
     // Make sure that saltA and saltB are not the same
     vm.assume(saltA != saltB);
