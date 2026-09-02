@@ -1,0 +1,34 @@
+{
+  "collateralAddresses": [
+    "0x5555555555555555555555555555555555555555"
+  ],
+  "consolAddress": "0x88E35cD2cc5845780058e997CBD3Fd92e3345864",
+  "conversionQueues": [
+    "0x42864b5D541ff9a905EFaD053AF24974cEdD15B1"
+  ],
+  "forfeitedAssetsPoolAddress": "0x20Eb8Ce3B787ed871F4E96f63850993C6c34571c",
+  "forfeitedAssetsQueue": "0x0B3c86f8212Fb1F8E392743BDE7ef1e7Fa376B81",
+  "generalManagerAddress": "0xDF8023679fE964982bDb93956f96B01c25f33Da5",
+  "interestRateOracleAddress": "0xa30672b528E73e7d5Fe3E34E480142824278D0dD",
+  "loanManagerAddress": "0x4ED1095fa7365d7155439bD43537c0A2F6C0DF12",
+  "mortgageNFTAddress": "0x6002e99c9469a4F90d3cd415DE8beAaF2B1DCefc",
+  "nativeWrapper": "0x5555555555555555555555555555555555555555",
+  "nftMetadataGeneratorAddress": "0x0000000000000000000000000000000000000000",
+  "orderPoolAddress": "0xfc74f7b04C620DaD6a750d4F60F13586E2b1EF54",
+  "originationPoolSchedulerAddress": "0x45C569ccf41523b867D09c435447c84248D3AA7B",
+  "priceOracles": [
+    "0x28167F333bD737630A1e0DF7Ee464c451e4Da9bd"
+  ],
+  "processor": "0xdb2f5CD36009DeA5cef8A902E9250Af7e99e46d1",
+  "pythAddress": "0xe9d69CdD6Fe41e7B621B4A688C5D1a68cB5c8ADc",
+  "subConsolAddresses": [
+    "0x7B068Ec86a8ABe1872D3Ccd983F1594180C8eC3D"
+  ],
+  "usdAddresses": [
+    "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb",
+    "0xb88339CB7199b77E23DB6E890353E22632Ba630f"
+  ],
+  "usdxAddress": "0x22632C11c1B4FF37edB06DDC1d5bF9C4ca2132E5",
+  "usdxQueue": "0x06cbFe3FAa9fD00840CD71742A39b2aFf776528D",
+  "yieldStrategies": []
+}
