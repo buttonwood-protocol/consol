@@ -28,7 +28,7 @@ abstract contract DeployAllRoleInvariantsBase is DeployAllTest {
     vm.setEnv("ADMIN_ADDRESS_2", vm.toString(deployerAddress));
     for (uint256 attempt = 0; attempt < 20; attempt++) {
       deployAll = new DeployAll();
-      deployAll.setTestAddressesFileSuffix(testId());
+      deployAll.setAddressesFileSuffix(testId());
       vm.setEnv("ADMIN_LENGTH", deployerInAdmins ? "3" : "2");
       deployAll.setUp();
       // Restore the scaffolding default so parallel suites read their expected configuration
@@ -76,7 +76,7 @@ contract DeployAllDeployerIsAdminTest is DeployAllRoleInvariantsBase {
 
   function test_deployerKeepsAdminRoleWhenConfiguredAsAdmin() public {
     // Use a dedicated addresses file so this test never races the inherited test_run on the same path
-    deployAll.setTestAddressesFileSuffix(string.concat(testId(), "Roles"));
+    deployAll.setAddressesFileSuffix(string.concat(testId(), "Roles"));
     run();
 
     address[4] memory targets = accessControlledTargets();
@@ -120,7 +120,7 @@ contract DeployAllRenounceDeployerTest is DeployAllRoleInvariantsBase {
 
   function test_deployerHoldsNoRolesAfterRenounce() public {
     // Use a dedicated addresses file so this test never races the inherited test_run on the same path
-    deployAll.setTestAddressesFileSuffix(string.concat(testId(), "Roles"));
+    deployAll.setAddressesFileSuffix(string.concat(testId(), "Roles"));
     run();
 
     address[4] memory targets = accessControlledTargets();

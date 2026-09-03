@@ -106,7 +106,7 @@ contract DeployAllTest is Test {
     vm.setEnv("USDX_WITHDRAWAL_GAS_FEE", "10000000000000000");
     vm.setEnv("FORFEITED_ASSETS_WITHDRAWAL_GAS_FEE", "10000000000000000");
     deployAll = new DeployAll();
-    deployAll.setTestAddressesFileSuffix(testId());
+    deployAll.setAddressesFileSuffix(testId());
     deployAll.setUp();
   }
 
