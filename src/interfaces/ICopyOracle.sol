@@ -39,7 +39,7 @@ interface ICopyOracle {
    */
   error InvalidSignature();
   /**
-   * @notice The error thrown when a timestamp is in the future or not newer than the stored timestamp
+   * @notice The error thrown when a timestamp is in the future or older than the stored timestamp
    * @param id The feed id
    * @param timestamp The rejected timestamp
    * @param latest The timestamp currently stored for the feed
@@ -84,7 +84,8 @@ interface ICopyOracle {
   function latestRoundData(bytes32 id) external view returns (int256 answer, uint256 updatedAt);
 
   /**
-   * @notice Stores a signed price reading for a feed
+   * @notice Stores a signed price reading for a feed. A reading whose timestamp equals the stored timestamp is
+   * accepted as a no-op
    * @param id The feed id
    * @param price The price with `decimals()` decimals
    * @param timestamp The time the reading was taken
@@ -93,7 +94,8 @@ interface ICopyOracle {
   function updatePrice(bytes32 id, int256 price, uint256 timestamp, bytes calldata signature) external;
 
   /**
-   * @notice Stores a batch of signed price readings
+   * @notice Stores a batch of signed price readings. A reading whose timestamp equals the stored timestamp is
+   * accepted as a no-op
    * @param updates The readings, each encoded as abi.encode(bytes32 id, int256 price, uint256 timestamp, bytes
    * signature)
    */

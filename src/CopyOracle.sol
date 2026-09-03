@@ -106,7 +106,8 @@ contract CopyOracle is ICopyOracle, AccessControl, EIP712 {
 
   /**
    * @notice Validates and stores a signed price reading for a feed
-   * @dev Validates the price, then the timestamp, then the signature, and stores the reading
+   * @dev Validates the price, then the signature, then the timestamp, and stores the reading. A reading whose
+   * timestamp equals the stored one is a no-op
    * @param id The feed id
    * @param price The price with PRICE_DECIMALS decimals
    * @param timestamp The time the reading was taken
@@ -117,17 +118,21 @@ contract CopyOracle is ICopyOracle, AccessControl, EIP712 {
       revert InvalidPrice(id, price);
     }
 
-    // A reading must not be from the future and must be strictly newer than the stored one
-    uint256 latest = _prices[id].updatedAt;
-    if (timestamp > block.timestamp || timestamp <= latest) {
-      revert InvalidTimestamp(id, timestamp, latest);
-    }
-
     // The digest binds the reading to this chain and this contract through the EIP-712 domain
     bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(PRICE_UPDATE_TYPEHASH, id, price, timestamp)));
     (address recovered,,) = ECDSA.tryRecover(digest, signature);
     if (recovered != signer) {
       revert InvalidSignature();
+    }
+
+    // A reading must not be from the future or older than the stored one. Resubmitting the stored timestamp
+    // changes nothing, so it is accepted without writing or emitting
+    uint256 latest = _prices[id].updatedAt;
+    if (timestamp > block.timestamp || timestamp < latest) {
+      revert InvalidTimestamp(id, timestamp, latest);
+    }
+    if (timestamp == latest) {
+      return;
     }
 
     _prices[id] = PriceData(price, timestamp);

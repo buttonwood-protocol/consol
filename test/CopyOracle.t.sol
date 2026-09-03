@@ -143,10 +143,35 @@ contract CopyOracleTest is Test {
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME - 1, signature);
   }
 
-  function test_updatePrice_replayEqualTimestamp() public {
+  // Resubmitting the stored reading succeeds without writing or emitting
+  function test_updatePrice_equalTimestampNoOp() public {
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME, START_TIME));
+
+    vm.recordLogs();
+    oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
+    assertEq(vm.getRecordedLogs().length, 0, "No event expected");
+    (int256 answer, uint256 updatedAt) = oracle.latestRoundData(AAPL_ID);
+    assertEq(answer, AAPL_PRICE, "Answer mismatch");
+    assertEq(updatedAt, START_TIME, "Updated at mismatch");
+  }
+
+  // A different price at the stored timestamp is also a no-op: the stored reading wins
+  function test_updatePrice_equalTimestampDifferentPrice() public {
+    _update(AAPL_ID, AAPL_PRICE, START_TIME);
+    vm.recordLogs();
+    _update(AAPL_ID, AAPL_PRICE + 1, START_TIME);
+    assertEq(vm.getRecordedLogs().length, 0, "No event expected");
+    (int256 answer, uint256 updatedAt) = oracle.latestRoundData(AAPL_ID);
+    assertEq(answer, AAPL_PRICE, "Answer mismatch");
+    assertEq(updatedAt, START_TIME, "Updated at mismatch");
+  }
+
+  function test_updatePrice_equalTimestampInvalidSignature() public {
+    _update(AAPL_ID, AAPL_PRICE, START_TIME);
+    (, uint256 otherPrivateKey) = makeAddrAndKey("other");
+    bytes memory signature = _sign(otherPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
+    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
   }
 
@@ -170,15 +195,16 @@ contract CopyOracleTest is Test {
     oracle.updatePrice(AAPL_ID, price, START_TIME, signature);
   }
 
-  // The price is validated before the timestamp, and the timestamp before the signature
+  // The price is validated before the signature, and the signature before the timestamp
   function test_updatePrice_checkOrder() public {
     bytes memory badSignature = new bytes(65);
     vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidPrice.selector, AAPL_ID, 0));
     oracle.updatePrice(AAPL_ID, 0, START_TIME + 1, badSignature);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME + 1, 0));
-    oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME + 1, badSignature);
     vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
-    oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, badSignature);
+    oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME + 1, badSignature);
+    bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME + 1);
+    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME + 1, 0));
+    oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME + 1, signature);
   }
 
   // A signature for the same reading on another contract must not verify here
@@ -244,6 +270,23 @@ contract CopyOracleTest is Test {
     (int256 answer, uint256 updatedAt) = oracle.latestRoundData(AAPL_ID);
     assertEq(answer, AAPL_PRICE + 1, "Answer mismatch");
     assertEq(updatedAt, START_TIME, "Updated at mismatch");
+  }
+
+  // An equal-timestamp element is skipped while the rest of the batch applies
+  function test_updatePrices_equalTimestampNoOp() public {
+    _update(AAPL_ID, AAPL_PRICE, START_TIME);
+    bytes[] memory updates = new bytes[](2);
+    updates[0] = _encode(AAPL_ID, AAPL_PRICE + 1, START_TIME);
+    updates[1] = _encode(TSLA_ID, TSLA_PRICE, START_TIME);
+    vm.recordLogs();
+    oracle.updatePrices(updates);
+    assertEq(vm.getRecordedLogs().length, 1, "Only the TSLA event expected");
+    (int256 aaplAnswer, uint256 aaplUpdatedAt) = oracle.latestRoundData(AAPL_ID);
+    (int256 tslaAnswer, uint256 tslaUpdatedAt) = oracle.latestRoundData(TSLA_ID);
+    assertEq(aaplAnswer, AAPL_PRICE, "AAPL answer mismatch");
+    assertEq(aaplUpdatedAt, START_TIME, "AAPL updated at mismatch");
+    assertEq(tslaAnswer, TSLA_PRICE, "TSLA answer mismatch");
+    assertEq(tslaUpdatedAt, START_TIME, "TSLA updated at mismatch");
   }
 
   function test_updatePrices_sameFeedOutOfOrder() public {
