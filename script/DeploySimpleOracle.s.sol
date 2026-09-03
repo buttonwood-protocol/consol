@@ -26,7 +26,7 @@ contract DeploySimpleOracle is Script {
   address public deployerAddress;
   uint256 public deployerPrivateKey;
   bool public isTest;
-  string public testAddressesFileSuffix;
+  string public addressesFileSuffix;
 
   address[] public collateralAddresses;
   IGeneralManager public generalManager;
@@ -75,7 +75,7 @@ contract DeploySimpleOracle is Script {
   function getPath() public view returns (string memory path) {
     string memory root = vm.projectRoot();
     if (isTest) {
-      path = string.concat(root, "/addresses/tests/addresses-", testAddressesFileSuffix, ".json");
+      path = string.concat(root, "/addresses/tests/addresses-", addressesFileSuffix, ".json");
     } else {
       path = string.concat(root, "/addresses/addresses-", vm.toString(block.chainid), ".json");
     }
@@ -116,7 +116,7 @@ contract DeploySimpleOracle is Script {
   }
 
   /// @dev This creates a unique file suffix during unit tests. Not used in actual deployment.
-  function setTestAddressesFileSuffix(string memory _testAddressesFileSuffix) public {
-    testAddressesFileSuffix = _testAddressesFileSuffix;
+  function setAddressesFileSuffix(string memory _addressesFileSuffix) public {
+    addressesFileSuffix = _addressesFileSuffix;
   }
 }

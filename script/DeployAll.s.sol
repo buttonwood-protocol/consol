@@ -10,7 +10,7 @@ import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol"
 import {Roles} from "../src/libraries/Roles.sol";
 
 contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues {
-  string public testAddressesFileSuffix;
+  string public addressesFileSuffix;
 
   function setUp() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
     BaseScript.setUp();
@@ -135,8 +135,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     uint256 chainId = block.chainid;
     string memory root = vm.projectRoot();
     // Explicitly excluding the localHost test to keep it in sync with local anvil deploys
-    if (isTest && keccak256(bytes(testAddressesFileSuffix)) != keccak256(bytes("LocalhostSetupTest"))) {
-      path = string.concat(root, "/addresses/tests/addresses-", testAddressesFileSuffix, ".json");
+    if (isTest && keccak256(bytes(addressesFileSuffix)) != keccak256(bytes("LocalhostSetupTest"))) {
+      path = string.concat(root, "/addresses/tests/addresses-", addressesFileSuffix, ".json");
     } else {
       path = string.concat(root, "/addresses/addresses-", vm.toString(chainId), ".json");
     }
@@ -197,7 +197,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
   }
 
   /// @dev This creates a unique file suffix during unit tests. Not used in actual deployment.
-  function setTestAddressesFileSuffix(string memory _testAddressesFileSuffix) public {
-    testAddressesFileSuffix = _testAddressesFileSuffix;
+  function setAddressesFileSuffix(string memory _addressesFileSuffix) public {
+    addressesFileSuffix = _addressesFileSuffix;
   }
 }

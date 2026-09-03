@@ -134,7 +134,7 @@ contract DeploySimpleOracleTest is Test {
     returns (DeploySimpleOracle deploy)
   {
     deploy = new DeploySimpleOracle();
-    deploy.setTestAddressesFileSuffix(suffix);
+    deploy.setAddressesFileSuffix(suffix);
     deploy.setUp();
 
     string memory obj = string.concat("book-", suffix);
