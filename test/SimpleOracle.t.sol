@@ -2,11 +2,11 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {CopyOracle} from "../src/CopyOracle.sol";
-import {ICopyOracle} from "../src/interfaces/ICopyOracle.sol";
+import {SimpleOracle} from "../src/SimpleOracle.sol";
+import {ISimpleOracle} from "../src/interfaces/ISimpleOracle.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 
-contract CopyOracleTest is Test {
+contract SimpleOracleTest is Test {
   // Constants
   bytes32 public constant EIP712_DOMAIN_TYPEHASH =
     keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
@@ -24,14 +24,14 @@ contract CopyOracleTest is Test {
   address public relayer;
 
   // Contracts
-  CopyOracle public oracle;
+  SimpleOracle public oracle;
 
   function setUp() public virtual {
     vm.warp(START_TIME);
     admin = makeAddr("admin");
     (signer, signerPrivateKey) = makeAddrAndKey("signer");
     relayer = makeAddr("relayer");
-    oracle = new CopyOracle(admin, signer);
+    oracle = new SimpleOracle(admin, signer);
   }
 
   function test_constructor() public view {
@@ -44,21 +44,21 @@ contract CopyOracleTest is Test {
 
   function test_constructor_domain() public view {
     (, string memory name, string memory version, uint256 chainId, address verifyingContract,,) = oracle.eip712Domain();
-    assertEq(name, "CopyOracle", "Domain name mismatch");
+    assertEq(name, "SimpleOracle", "Domain name mismatch");
     assertEq(version, "1", "Domain version mismatch");
     assertEq(chainId, block.chainid, "Domain chain id mismatch");
     assertEq(verifyingContract, address(oracle), "Domain verifying contract mismatch");
   }
 
   function test_constructor_zeroSigner() public {
-    vm.expectRevert(abi.encodeWithSelector(CopyOracle.InvalidSigner.selector));
-    new CopyOracle(admin, address(0));
+    vm.expectRevert(abi.encodeWithSelector(SimpleOracle.InvalidSigner.selector));
+    new SimpleOracle(admin, address(0));
   }
 
   function test_updatePrice() public {
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
     vm.expectEmit(true, true, true, true);
-    emit ICopyOracle.PriceUpdated(AAPL_ID, AAPL_PRICE, START_TIME);
+    emit ISimpleOracle.PriceUpdated(AAPL_ID, AAPL_PRICE, START_TIME);
     vm.prank(relayer);
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
 
@@ -103,7 +103,7 @@ contract CopyOracleTest is Test {
   function test_updatePrice_wrongSigner() public {
     (, uint256 otherPrivateKey) = makeAddrAndKey("other");
     bytes memory signature = _sign(otherPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
   }
 
@@ -111,7 +111,7 @@ contract CopyOracleTest is Test {
     tamperedPrice = bound(tamperedPrice, 1, type(int256).max);
     vm.assume(tamperedPrice != AAPL_PRICE);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, tamperedPrice, START_TIME, signature);
   }
 
@@ -119,27 +119,29 @@ contract CopyOracleTest is Test {
     tamperedTimestamp = bound(tamperedTimestamp, 1, START_TIME);
     vm.assume(tamperedTimestamp != START_TIME - 1);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME - 1);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, tamperedTimestamp, signature);
   }
 
   function test_updatePrice_tamperedId(bytes32 tamperedId) public {
     vm.assume(tamperedId != AAPL_ID);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(tamperedId, AAPL_PRICE, START_TIME, signature);
   }
 
   function test_updatePrice_malformedSignature(bytes memory signature) public {
     vm.assume(signature.length != 65);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
   }
 
   function test_updatePrice_replayOlderTimestamp() public {
     _update(AAPL_ID, AAPL_PRICE, START_TIME);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME - 1);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME - 1, START_TIME));
+    vm.expectRevert(
+      abi.encodeWithSelector(ISimpleOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME - 1, START_TIME)
+    );
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME - 1, signature);
   }
 
@@ -171,48 +173,48 @@ contract CopyOracleTest is Test {
     _update(AAPL_ID, AAPL_PRICE, START_TIME);
     (, uint256 otherPrivateKey) = makeAddrAndKey("other");
     bytes memory signature = _sign(otherPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
   }
 
   function test_updatePrice_futureTimestamp(uint256 timestamp) public {
     timestamp = bound(timestamp, START_TIME + 1, type(uint256).max);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, timestamp);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, timestamp, 0));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidTimestamp.selector, AAPL_ID, timestamp, 0));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, timestamp, signature);
   }
 
   function test_updatePrice_zeroPrice() public {
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, 0, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidPrice.selector, AAPL_ID, 0));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidPrice.selector, AAPL_ID, 0));
     oracle.updatePrice(AAPL_ID, 0, START_TIME, signature);
   }
 
   function test_updatePrice_negativePrice(int256 price) public {
     price = bound(price, type(int256).min, -1);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, price, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidPrice.selector, AAPL_ID, price));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidPrice.selector, AAPL_ID, price));
     oracle.updatePrice(AAPL_ID, price, START_TIME, signature);
   }
 
   // The price is validated before the signature, and the signature before the timestamp
   function test_updatePrice_checkOrder() public {
     bytes memory badSignature = new bytes(65);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidPrice.selector, AAPL_ID, 0));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidPrice.selector, AAPL_ID, 0));
     oracle.updatePrice(AAPL_ID, 0, START_TIME + 1, badSignature);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME + 1, badSignature);
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME + 1);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME + 1, 0));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME + 1, 0));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME + 1, signature);
   }
 
   // A signature for the same reading on another contract must not verify here
   function test_updatePrice_wrongVerifyingContract() public {
-    CopyOracle otherOracle = new CopyOracle(admin, signer);
+    SimpleOracle otherOracle = new SimpleOracle(admin, signer);
     bytes32 digest = _digest(address(otherOracle), block.chainid, AAPL_ID, AAPL_PRICE, START_TIME);
     bytes memory signature = _signDigest(signerPrivateKey, digest);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
 
     // The same signature is valid on the contract it was made for
@@ -225,7 +227,7 @@ contract CopyOracleTest is Test {
     vm.assume(chainId != block.chainid);
     bytes32 digest = _digest(address(oracle), chainId, AAPL_ID, AAPL_PRICE, START_TIME);
     bytes memory signature = _signDigest(signerPrivateKey, digest);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
   }
 
@@ -233,7 +235,7 @@ contract CopyOracleTest is Test {
   function test_updatePrice_chainIdChange() public {
     bytes memory signature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
     vm.chainId(block.chainid + 1);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, signature);
 
     bytes memory rebased = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
@@ -247,9 +249,9 @@ contract CopyOracleTest is Test {
     updates[0] = _encode(AAPL_ID, AAPL_PRICE, START_TIME - 1);
     updates[1] = _encode(TSLA_ID, TSLA_PRICE, START_TIME);
     vm.expectEmit(true, true, true, true);
-    emit ICopyOracle.PriceUpdated(AAPL_ID, AAPL_PRICE, START_TIME - 1);
+    emit ISimpleOracle.PriceUpdated(AAPL_ID, AAPL_PRICE, START_TIME - 1);
     vm.expectEmit(true, true, true, true);
-    emit ICopyOracle.PriceUpdated(TSLA_ID, TSLA_PRICE, START_TIME);
+    emit ISimpleOracle.PriceUpdated(TSLA_ID, TSLA_PRICE, START_TIME);
     vm.prank(relayer);
     oracle.updatePrices(updates);
 
@@ -293,7 +295,9 @@ contract CopyOracleTest is Test {
     bytes[] memory updates = new bytes[](2);
     updates[0] = _encode(AAPL_ID, AAPL_PRICE, START_TIME);
     updates[1] = _encode(AAPL_ID, AAPL_PRICE + 1, START_TIME - 1);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME - 1, START_TIME));
+    vm.expectRevert(
+      abi.encodeWithSelector(ISimpleOracle.InvalidTimestamp.selector, AAPL_ID, START_TIME - 1, START_TIME)
+    );
     oracle.updatePrices(updates);
   }
 
@@ -303,34 +307,34 @@ contract CopyOracleTest is Test {
     bytes[] memory updates = new bytes[](2);
     updates[0] = _encode(AAPL_ID, AAPL_PRICE, START_TIME);
     updates[1] = abi.encode(TSLA_ID, TSLA_PRICE, START_TIME, _sign(otherPrivateKey, TSLA_ID, TSLA_PRICE, START_TIME));
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrices(updates);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.UnknownFeed.selector, AAPL_ID));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.UnknownFeed.selector, AAPL_ID));
     oracle.latestRoundData(AAPL_ID);
   }
 
   function test_updatePrices_empty() public {
     oracle.updatePrices(new bytes[](0));
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.UnknownFeed.selector, AAPL_ID));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.UnknownFeed.selector, AAPL_ID));
     oracle.latestRoundData(AAPL_ID);
   }
 
   function test_latestRoundData_unknownFeed(bytes32 id) public {
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.UnknownFeed.selector, id));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.UnknownFeed.selector, id));
     oracle.latestRoundData(id);
   }
 
   function test_setSigner() public {
     (address newSigner, uint256 newSignerPrivateKey) = makeAddrAndKey("newSigner");
     vm.expectEmit(true, true, true, true);
-    emit ICopyOracle.SignerUpdated(signer, newSigner);
+    emit ISimpleOracle.SignerUpdated(signer, newSigner);
     vm.prank(admin);
     oracle.setSigner(newSigner);
     assertEq(oracle.signer(), newSigner, "Signer mismatch");
 
     // Only the new signer's readings are accepted
     bytes memory oldSignature = _sign(signerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.InvalidSignature.selector));
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.InvalidSignature.selector));
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, oldSignature);
     oracle.updatePrice(AAPL_ID, AAPL_PRICE, START_TIME, _sign(newSignerPrivateKey, AAPL_ID, AAPL_PRICE, START_TIME));
     (int256 answer,) = oracle.latestRoundData(AAPL_ID);
@@ -351,7 +355,7 @@ contract CopyOracleTest is Test {
   }
 
   function test_setSigner_zeroAddress() public {
-    vm.expectRevert(abi.encodeWithSelector(CopyOracle.InvalidSigner.selector));
+    vm.expectRevert(abi.encodeWithSelector(SimpleOracle.InvalidSigner.selector));
     vm.prank(admin);
     oracle.setSigner(address(0));
   }
@@ -380,7 +384,7 @@ contract CopyOracleTest is Test {
     returns (bytes32)
   {
     bytes32 domainSeparator = keccak256(
-      abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256("CopyOracle"), keccak256("1"), chainId, verifyingContract)
+      abi.encode(EIP712_DOMAIN_TYPEHASH, keccak256("SimpleOracle"), keccak256("1"), chainId, verifyingContract)
     );
     bytes32 structHash = keccak256(abi.encode(PRICE_UPDATE_TYPEHASH, id, price, timestamp));
     return keccak256(abi.encodePacked("\x19\x01", domainSeparator, structHash));

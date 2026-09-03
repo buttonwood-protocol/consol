@@ -2,16 +2,16 @@
 pragma solidity ^0.8.20;
 
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
-import {ICopyOracle} from "./interfaces/ICopyOracle.sol";
+import {ISimpleOracle} from "./interfaces/ISimpleOracle.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 /**
- * @title CopyOraclePriceOracle
+ * @title SimpleOraclePriceOracle
  * @author SocksNFlops
- * @notice The CopyOraclePriceOracle contract tracks the price of a given asset by reading a feed from a CopyOracle
+ * @notice The SimpleOraclePriceOracle contract tracks the price of a given asset by reading a feed from a SimpleOracle
  * store, to determine the trigger price for conversions.
  */
-contract CopyOraclePriceOracle is IPriceOracle {
+contract SimpleOraclePriceOracle is IPriceOracle {
   /**
    * @notice The number of decimals for USD
    * @return USD_DECIMALS The number of decimals for USD
@@ -24,10 +24,10 @@ contract CopyOraclePriceOracle is IPriceOracle {
   uint8 public constant PRICE_DECIMALS = 8;
 
   /**
-   * @notice The CopyOracle store
-   * @return copyOracle The CopyOracle store
+   * @notice The SimpleOracle store
+   * @return simpleOracle The SimpleOracle store
    */
-  ICopyOracle public immutable copyOracle;
+  ISimpleOracle public immutable simpleOracle;
   /**
    * @notice The id of the tracked feed
    * @return feedId The id of the tracked feed
@@ -67,18 +67,18 @@ contract CopyOraclePriceOracle is IPriceOracle {
 
   /**
    * @notice Constructor
-   * @param copyOracle_ The address of the CopyOracle store
+   * @param simpleOracle_ The address of the SimpleOracle store
    * @param feedId_ The id of the tracked feed
    * @param collateralDecimals_ The number of decimals for the collateral
    * @param maxAge_ The maximum age of a price in seconds
    */
-  constructor(address copyOracle_, bytes32 feedId_, uint8 collateralDecimals_, uint256 maxAge_) {
-    ICopyOracle store = ICopyOracle(copyOracle_);
+  constructor(address simpleOracle_, bytes32 feedId_, uint8 collateralDecimals_, uint256 maxAge_) {
+    ISimpleOracle store = ISimpleOracle(simpleOracle_);
     uint8 decimals = store.decimals();
     if (decimals != PRICE_DECIMALS) {
       revert InvalidDecimals(decimals);
     }
-    copyOracle = store;
+    simpleOracle = store;
     feedId = feedId_;
     collateralDecimals = collateralDecimals_;
     maxAge = maxAge_;
@@ -89,7 +89,7 @@ contract CopyOraclePriceOracle is IPriceOracle {
    * @inheritdoc IPriceOracle
    */
   function price() public view override returns (uint256 assetPrice) {
-    (int256 answer, uint256 updatedAt) = copyOracle.latestRoundData(feedId);
+    (int256 answer, uint256 updatedAt) = simpleOracle.latestRoundData(feedId);
 
     // Validate the price is recent
     uint256 age = block.timestamp - updatedAt;

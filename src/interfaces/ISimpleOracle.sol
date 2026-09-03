@@ -2,12 +2,12 @@
 pragma solidity ^0.8.20;
 
 /**
- * @title ICopyOracle
+ * @title ISimpleOracle
  * @author SocksNFlops
- * @notice Interface for the copy oracle: a price store that accepts readings signed by a configured signer and
+ * @notice Interface for the simple oracle: a price store that accepts readings signed by a configured signer and
  * serves the latest reading per feed.
  */
-interface ICopyOracle {
+interface ISimpleOracle {
   /**
    * @notice A signed price reading for a feed
    * @param id The feed id

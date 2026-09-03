@@ -1,21 +1,21 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.20;
 
-import {ICopyOracle} from "./interfaces/ICopyOracle.sol";
+import {ISimpleOracle} from "./interfaces/ISimpleOracle.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 /**
- * @title CopyOracle
+ * @title SimpleOracle
  * @author SocksNFlops
- * @notice The CopyOracle contract stores the latest price per feed, accepting only readings signed by the
+ * @notice The SimpleOracle contract stores the latest price per feed, accepting only readings signed by the
  * configured signer. Signatures are EIP-712 typed data bound to this chain and this contract, so a reading signed
  * for one deployment cannot be replayed on another. Anyone may relay a valid reading.
  */
-contract CopyOracle is ICopyOracle, AccessControl, EIP712 {
+contract SimpleOracle is ISimpleOracle, AccessControl, EIP712 {
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   bytes32 public constant override PRICE_UPDATE_TYPEHASH =
     keccak256("PriceUpdate(bytes32 id,int256 price,uint256 timestamp)");
@@ -26,7 +26,7 @@ contract CopyOracle is ICopyOracle, AccessControl, EIP712 {
   uint8 public constant PRICE_DECIMALS = 8;
 
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   address public override signer;
 
@@ -55,27 +55,27 @@ contract CopyOracle is ICopyOracle, AccessControl, EIP712 {
    * @param admin_ The address granted the DEFAULT_ADMIN_ROLE
    * @param signer_ The address whose signatures are accepted
    */
-  constructor(address admin_, address signer_) EIP712("CopyOracle", "1") {
+  constructor(address admin_, address signer_) EIP712("SimpleOracle", "1") {
     _grantRole(DEFAULT_ADMIN_ROLE, admin_);
     _setSigner(signer_);
   }
 
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   function decimals() external pure override returns (uint8) {
     return PRICE_DECIMALS;
   }
 
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   function setSigner(address newSigner) external override onlyRole(DEFAULT_ADMIN_ROLE) {
     _setSigner(newSigner);
   }
 
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   function latestRoundData(bytes32 id) external view override returns (int256 answer, uint256 updatedAt) {
     PriceData memory priceData = _prices[id];
@@ -87,14 +87,14 @@ contract CopyOracle is ICopyOracle, AccessControl, EIP712 {
   }
 
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   function updatePrice(bytes32 id, int256 price, uint256 timestamp, bytes calldata signature) external override {
     _updatePrice(id, price, timestamp, signature);
   }
 
   /**
-   * @inheritdoc ICopyOracle
+   * @inheritdoc ISimpleOracle
    */
   function updatePrices(bytes[] calldata updates) external override {
     for (uint256 i = 0; i < updates.length; i++) {

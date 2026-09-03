@@ -2,15 +2,15 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {CopyOracle} from "../src/CopyOracle.sol";
-import {CopyOraclePriceOracle} from "../src/CopyOraclePriceOracle.sol";
-import {ICopyOracle} from "../src/interfaces/ICopyOracle.sol";
+import {SimpleOracle} from "../src/SimpleOracle.sol";
+import {SimpleOraclePriceOracle} from "../src/SimpleOraclePriceOracle.sol";
+import {ISimpleOracle} from "../src/interfaces/ISimpleOracle.sol";
 import {PythPriceOracle} from "../src/PythPriceOracle.sol";
 import {MockPyth} from "@pythnetwork/MockPyth.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 // A store whose readings and decimals are set directly, to drive the adapter into states the real store rejects
-contract MockCopyOracleStore {
+contract MockSimpleOracleStore {
   uint8 public decimals;
   int256 public answer;
   uint256 public updatedAt;
@@ -29,7 +29,7 @@ contract MockCopyOracleStore {
   }
 }
 
-contract CopyOraclePriceOracleTest is Test {
+contract SimpleOraclePriceOracleTest is Test {
   // Constants
   bytes32 public constant PRICE_UPDATE_TYPEHASH = keccak256("PriceUpdate(bytes32 id,int256 price,uint256 timestamp)");
   bytes32 public constant FEED_ID = keccak256("MOCK_PYTH:46630:AAPL");
@@ -43,20 +43,20 @@ contract CopyOraclePriceOracleTest is Test {
   uint256 public signerPrivateKey;
 
   // Contracts
-  CopyOracle public store;
-  CopyOraclePriceOracle public oracle;
+  SimpleOracle public store;
+  SimpleOraclePriceOracle public oracle;
 
   function setUp() public virtual {
     vm.warp(START_TIME);
     admin = makeAddr("admin");
     (signer, signerPrivateKey) = makeAddrAndKey("signer");
-    store = new CopyOracle(admin, signer);
+    store = new SimpleOracle(admin, signer);
     _push(FEED_ID, FEED_PRICE, START_TIME);
-    oracle = new CopyOraclePriceOracle(address(store), FEED_ID, 8, MAX_AGE);
+    oracle = new SimpleOraclePriceOracle(address(store), FEED_ID, 8, MAX_AGE);
   }
 
   function test_constructor() public view {
-    assertEq(address(oracle.copyOracle()), address(store), "Store mismatch");
+    assertEq(address(oracle.simpleOracle()), address(store), "Store mismatch");
     assertEq(oracle.feedId(), FEED_ID, "Feed id mismatch");
     assertEq(oracle.collateralDecimals(), 8, "Collateral decimals mismatch");
     assertEq(oracle.maxAge(), MAX_AGE, "Max age mismatch");
@@ -65,9 +65,9 @@ contract CopyOraclePriceOracleTest is Test {
 
   function test_constructor_invalidDecimals(uint8 decimals) public {
     vm.assume(decimals != 8);
-    MockCopyOracleStore badStore = new MockCopyOracleStore(decimals);
-    vm.expectRevert(abi.encodeWithSelector(CopyOraclePriceOracle.InvalidDecimals.selector, decimals));
-    new CopyOraclePriceOracle(address(badStore), FEED_ID, 8, MAX_AGE);
+    MockSimpleOracleStore badStore = new MockSimpleOracleStore(decimals);
+    vm.expectRevert(abi.encodeWithSelector(SimpleOraclePriceOracle.InvalidDecimals.selector, decimals));
+    new SimpleOraclePriceOracle(address(badStore), FEED_ID, 8, MAX_AGE);
   }
 
   function test_price() public view {
@@ -95,39 +95,39 @@ contract CopyOraclePriceOracleTest is Test {
 
     // One second older is stale
     vm.warp(START_TIME + MAX_AGE + 1);
-    vm.expectRevert(abi.encodeWithSelector(CopyOraclePriceOracle.StalePrice.selector, MAX_AGE + 1, MAX_AGE));
+    vm.expectRevert(abi.encodeWithSelector(SimpleOraclePriceOracle.StalePrice.selector, MAX_AGE + 1, MAX_AGE));
     oracle.price();
   }
 
   function test_price_stale(uint256 age) public {
     age = bound(age, MAX_AGE + 1, type(uint64).max);
     vm.warp(START_TIME + age);
-    vm.expectRevert(abi.encodeWithSelector(CopyOraclePriceOracle.StalePrice.selector, age, MAX_AGE));
+    vm.expectRevert(abi.encodeWithSelector(SimpleOraclePriceOracle.StalePrice.selector, age, MAX_AGE));
     oracle.price();
   }
 
   function test_price_unknownFeed(bytes32 feedId) public {
     vm.assume(feedId != FEED_ID);
-    CopyOraclePriceOracle unknownOracle = new CopyOraclePriceOracle(address(store), feedId, 8, MAX_AGE);
-    vm.expectRevert(abi.encodeWithSelector(ICopyOracle.UnknownFeed.selector, feedId));
+    SimpleOraclePriceOracle unknownOracle = new SimpleOraclePriceOracle(address(store), feedId, 8, MAX_AGE);
+    vm.expectRevert(abi.encodeWithSelector(ISimpleOracle.UnknownFeed.selector, feedId));
     unknownOracle.price();
   }
 
   function test_price_nonPositiveAnswer(int256 answer) public {
     answer = bound(answer, type(int256).min, 0);
-    MockCopyOracleStore badStore = new MockCopyOracleStore(8);
+    MockSimpleOracleStore badStore = new MockSimpleOracleStore(8);
     badStore.set(answer, START_TIME);
-    CopyOraclePriceOracle badOracle = new CopyOraclePriceOracle(address(badStore), FEED_ID, 8, MAX_AGE);
-    vm.expectRevert(abi.encodeWithSelector(CopyOraclePriceOracle.InvalidAnswer.selector, answer));
+    SimpleOraclePriceOracle badOracle = new SimpleOraclePriceOracle(address(badStore), FEED_ID, 8, MAX_AGE);
+    vm.expectRevert(abi.encodeWithSelector(SimpleOraclePriceOracle.InvalidAnswer.selector, answer));
     badOracle.price();
   }
 
   // Staleness is checked before the answer
   function test_price_staleBeforeAnswer() public {
-    MockCopyOracleStore badStore = new MockCopyOracleStore(8);
+    MockSimpleOracleStore badStore = new MockSimpleOracleStore(8);
     badStore.set(0, START_TIME - MAX_AGE - 1);
-    CopyOraclePriceOracle badOracle = new CopyOraclePriceOracle(address(badStore), FEED_ID, 8, MAX_AGE);
-    vm.expectRevert(abi.encodeWithSelector(CopyOraclePriceOracle.StalePrice.selector, MAX_AGE + 1, MAX_AGE));
+    SimpleOraclePriceOracle badOracle = new SimpleOraclePriceOracle(address(badStore), FEED_ID, 8, MAX_AGE);
+    vm.expectRevert(abi.encodeWithSelector(SimpleOraclePriceOracle.StalePrice.selector, MAX_AGE + 1, MAX_AGE));
     badOracle.price();
   }
 
@@ -139,7 +139,7 @@ contract CopyOraclePriceOracleTest is Test {
   }
 
   function test_cost_18Decimals() public {
-    CopyOraclePriceOracle oracle18 = new CopyOraclePriceOracle(address(store), FEED_ID, 18, MAX_AGE);
+    SimpleOraclePriceOracle oracle18 = new SimpleOraclePriceOracle(address(store), FEED_ID, 18, MAX_AGE);
     // 2.5 units at $81.076 is $202.69
     (uint256 totalCost, uint8 collateralDecimals) = oracle18.cost(25e17);
     assertEq(totalCost, 20269e16, "Cost mismatch");
@@ -155,7 +155,7 @@ contract CopyOraclePriceOracleTest is Test {
 
   function test_cost_stale() public {
     vm.warp(START_TIME + MAX_AGE + 1);
-    vm.expectRevert(abi.encodeWithSelector(CopyOraclePriceOracle.StalePrice.selector, MAX_AGE + 1, MAX_AGE));
+    vm.expectRevert(abi.encodeWithSelector(SimpleOraclePriceOracle.StalePrice.selector, MAX_AGE + 1, MAX_AGE));
     oracle.cost(1e8);
   }
 
@@ -177,7 +177,8 @@ contract CopyOraclePriceOracleTest is Test {
 
     vm.warp(START_TIME + 1);
     _push(FEED_ID, answer, START_TIME + 1);
-    CopyOraclePriceOracle sampleOracle = new CopyOraclePriceOracle(address(store), FEED_ID, collateralDecimals, MAX_AGE);
+    SimpleOraclePriceOracle sampleOracle =
+      new SimpleOraclePriceOracle(address(store), FEED_ID, collateralDecimals, MAX_AGE);
 
     // Both oracles must report the same price and cost for the same inputs
     assertEq(sampleOracle.price(), pythOracle.price(), "Price mismatch");

@@ -4,23 +4,23 @@ pragma solidity ^0.8.20;
 import {Script} from "forge-std/Script.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
-import {CopyOracle} from "../src/CopyOracle.sol";
-import {CopyOraclePriceOracle} from "../src/CopyOraclePriceOracle.sol";
+import {SimpleOracle} from "../src/SimpleOracle.sol";
+import {SimpleOraclePriceOracle} from "../src/SimpleOraclePriceOracle.sol";
 import {IGeneralManager} from "../src/interfaces/IGeneralManager/IGeneralManager.sol";
 import {Roles} from "../src/libraries/Roles.sol";
 
 /**
- * @title DeployCopyOracle
- * @notice Deploys a CopyOracle store and one CopyOraclePriceOracle adapter per collateral, points the
+ * @title DeploySimpleOracle
+ * @notice Deploys a SimpleOracle store and one SimpleOraclePriceOracle adapter per collateral, points the
  * GeneralManager at the adapters, and records the new addresses in the chain's address book.
  * @dev The collaterals and the GeneralManager are read from addresses/addresses-<chainId>.json so that the
  * adapters are written back in the same positional order as the collaterals. The deployer must hold the
  * DEFAULT_ADMIN_ROLE on the GeneralManager.
  *
  * Run (from packages/contracts):
- *   forge script script/DeployCopyOracle.s.sol --rpc-url robinhood-testnet --broadcast
+ *   forge script script/DeploySimpleOracle.s.sol --rpc-url robinhood-testnet --broadcast
  */
-contract DeployCopyOracle is Script {
+contract DeploySimpleOracle is Script {
   uint256 public constant MAX_AGE = 60 seconds;
 
   address public deployerAddress;
@@ -30,8 +30,8 @@ contract DeployCopyOracle is Script {
 
   address[] public collateralAddresses;
   IGeneralManager public generalManager;
-  CopyOracle public copyOracle;
-  CopyOraclePriceOracle[] public priceOracles;
+  SimpleOracle public simpleOracle;
+  SimpleOraclePriceOracle[] public priceOracles;
 
   function setUp() public virtual {
     deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
@@ -43,8 +43,8 @@ contract DeployCopyOracle is Script {
     string memory path = getPath();
     loadAddressBook(path);
 
-    address admin = vm.envAddress("COPY_ORACLE_ADMIN");
-    address signer = vm.envAddress("COPY_ORACLE_SIGNER");
+    address admin = vm.envAddress("SIMPLE_ORACLE_ADMIN");
+    address signer = vm.envAddress("SIMPLE_ORACLE_SIGNER");
     uint256 collateralTokenLength = vm.envUint("COLLATERAL_TOKEN_LENGTH");
     require(
       collateralTokenLength == collateralAddresses.length, "COLLATERAL_TOKEN_LENGTH does not match the address book"
@@ -55,13 +55,13 @@ contract DeployCopyOracle is Script {
     );
 
     vm.startBroadcast(deployerPrivateKey);
-    copyOracle = new CopyOracle(admin, signer);
+    simpleOracle = new SimpleOracle(admin, signer);
     deployPriceOracles();
     vm.stopBroadcast();
 
     // Verify the wiring before recording it
-    require(copyOracle.signer() == signer, "CopyOracle signer mismatch");
-    require(copyOracle.hasRole(Roles.DEFAULT_ADMIN_ROLE, admin), "CopyOracle admin missing");
+    require(simpleOracle.signer() == signer, "SimpleOracle signer mismatch");
+    require(simpleOracle.hasRole(Roles.DEFAULT_ADMIN_ROLE, admin), "SimpleOracle admin missing");
     for (uint256 i = 0; i < collateralAddresses.length; i++) {
       require(
         generalManager.priceOracles(collateralAddresses[i]) == address(priceOracles[i]),
@@ -95,18 +95,18 @@ contract DeployCopyOracle is Script {
         IERC20Metadata(collateralAddresses[i]).decimals() == collateralDecimals,
         string.concat("COLLATERAL_DECIMALS_", vm.toString(i), " does not match the token")
       );
-      CopyOraclePriceOracle priceOracle =
-        new CopyOraclePriceOracle(address(copyOracle), feedId, collateralDecimals, MAX_AGE);
+      SimpleOraclePriceOracle priceOracle =
+        new SimpleOraclePriceOracle(address(simpleOracle), feedId, collateralDecimals, MAX_AGE);
       priceOracles.push(priceOracle);
       generalManager.setPriceOracle(collateralAddresses[i], address(priceOracle));
     }
   }
 
-  /// @dev Adds copyOracleAddress to the address book and replaces priceOracles, leaving every other key untouched
+  /// @dev Adds simpleOracleAddress to the address book and replaces priceOracles, leaving every other key untouched
   function logAddresses(string memory path) public {
     string memory obj = "addressBook";
     string memory json = vm.serializeJson(obj, vm.readFile(path));
-    json = vm.serializeAddress(obj, "copyOracleAddress", address(copyOracle));
+    json = vm.serializeAddress(obj, "simpleOracleAddress", address(simpleOracle));
     address[] memory addressList = new address[](priceOracles.length);
     for (uint256 i = 0; i < priceOracles.length; i++) {
       addressList[i] = address(priceOracles[i]);
