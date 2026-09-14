@@ -8,7 +8,7 @@ import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Ini
 import {UUPSUpgradeable, IERC1822Proxiable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ERC165Upgradeable} from "@openzeppelin/contracts-upgradeable/utils/introspection/ERC165Upgradeable.sol";
 import {IGeneralManager} from "./interfaces/IGeneralManager/IGeneralManager.sol";
-import {MortgagePosition} from "./types/MortgagePosition.sol";
+import {MortgagePosition, MortgageStatus} from "./types/MortgagePosition.sol";
 import {IInterestRateOracle} from "./interfaces/IInterestRateOracle.sol";
 import {IOriginationPoolScheduler} from "./interfaces/IOriginationPoolScheduler/IOriginationPoolScheduler.sol";
 import {IOriginationPool} from "./interfaces/IOriginationPool/IOriginationPool.sol";
@@ -263,13 +263,20 @@ contract GeneralManager is
    * @dev Appends the conversionQueueList to the recorded conversion queues for a mortgage position
    * @param tokenId The tokenId of the mortgage position
    * @param conversionQueueList The list of conversion queues to update
+   * @param collateral The collateral of the mortgage position
    */
-  function _addConversionQueues(uint256 tokenId, address[] memory conversionQueueList) internal {
+  function _addConversionQueues(uint256 tokenId, address[] memory conversionQueueList, address collateral) internal {
     // Fetch storage
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
     // Iterate through the conversionQueueList and add into the conversionQueues mapping for the mortgage position
     for (uint256 i = 0; i < conversionQueueList.length; i++) {
+      // Validate that the queue converts the mortgage's collateral. A foreign collateral's trigger price is
+      // denominated in a different asset and would corrupt the queue ordering and block processing.
+      address queueAsset = IConversionQueue(conversionQueueList[i]).asset();
+      if (queueAsset != collateral) {
+        revert ConversionQueueAssetMismatch(conversionQueueList[i], queueAsset, collateral);
+      }
       // Check if the mortgage is already enqueued in the conversion queue
       if ($._mortgageEnqueued[tokenId][conversionQueueList[i]]) {
         revert MortgageAlreadyEnqueuedInConversionQueue(tokenId, conversionQueueList[i]);
@@ -993,7 +1000,7 @@ contract GeneralManager is
     tokenId = IMortgageNFT(mortgageNFT()).mint(_msgSender(), creationRequest.mortgageId);
 
     // Set the conversion queues for the mortgage position
-    _addConversionQueues(tokenId, creationRequest.conversionQueues);
+    _addConversionQueues(tokenId, creationRequest.conversionQueues, creationRequest.collateral);
 
     // Check if the caller has sent enough gas and refund the surplus
     uint256 requiredGasFee = _calculateRequiredGasFee(true, creationRequest.conversionQueues);
@@ -1060,6 +1067,13 @@ contract GeneralManager is
    * @inheritdoc IGeneralManager
    */
   function burnMortgageNFT(uint256 tokenId) external onlyRole(Roles.NFT_ROLE) {
+    // Skip burning for an active mortgage: expired expansion orders reference live positions.
+    // Redeem and foreclose set their status before burning. An empty position reads tokenId 0
+    // and ACTIVE, so tokenId != 0 keeps nonexistent-token burns reverting.
+    MortgagePosition memory mortgagePosition = ILoanManager(loanManager()).getMortgagePosition(tokenId);
+    if (tokenId != 0 && mortgagePosition.tokenId == tokenId && mortgagePosition.status == MortgageStatus.ACTIVE) {
+      return;
+    }
     // Burn the mortgage NFT
     IMortgageNFT(mortgageNFT()).burn(tokenId);
   }
@@ -1206,7 +1220,9 @@ contract GeneralManager is
     onlyMortgageOwner(tokenId)
   {
     // Add the conversion queues for the mortgage position
-    _addConversionQueues(tokenId, conversionQueueList);
+    _addConversionQueues(
+      tokenId, conversionQueueList, ILoanManager(loanManager()).getMortgagePosition(tokenId).collateral
+    );
 
     // Calculate the required gas fee
     uint256 requiredGasFee = _calculateRequiredGasFee(false, conversionQueueList);

@@ -139,6 +139,14 @@ interface IGeneralManagerErrors {
   error OriginationFeeRateTooHigh(uint16 originationFeeRate, uint16 maximumRate);
 
   /**
+   * @notice Thrown when a conversion queue does not convert the mortgage's collateral
+   * @param conversionQueue The address of the conversion queue
+   * @param asset The asset the conversion queue converts
+   * @param collateral The collateral of the mortgage
+   */
+  error ConversionQueueAssetMismatch(address conversionQueue, address asset, address collateral);
+
+  /**
    * @notice Thrown when the origination fee value is not covered by the purchase amount
    * @param feeValue The origination fee value in USDX
    * @param purchaseAmount The purchase amount
