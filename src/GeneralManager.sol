@@ -1067,11 +1067,9 @@ contract GeneralManager is
    * @inheritdoc IGeneralManager
    */
   function burnMortgageNFT(uint256 tokenId) external onlyRole(Roles.NFT_ROLE) {
-    // Skip burning while an active mortgage position exists for the tokenId: an expired expansion order
-    // references a live mortgage, whose NFT lifecycle belongs to the loan flows rather than order cleanup.
-    // Redeem and foreclose set their status before burning, so their burns pass this guard.
-    // The tokenId != 0 condition keeps burns of nonexistent tokens reverting, as an empty position also
-    // reads tokenId 0 and ACTIVE.
+    // Skip burning for an active mortgage: expired expansion orders reference live positions.
+    // Redeem and foreclose set their status before burning. An empty position reads tokenId 0
+    // and ACTIVE, so tokenId != 0 keeps nonexistent-token burns reverting.
     MortgagePosition memory mortgagePosition = ILoanManager(loanManager()).getMortgagePosition(tokenId);
     if (tokenId != 0 && mortgagePosition.tokenId == tokenId && mortgagePosition.status == MortgageStatus.ACTIVE) {
       return;
