@@ -812,11 +812,11 @@ contract GeneralManager is
     // The origination fee is disabled while the fee recipient is unset
     uint16 originationFeeRate_ =
       _getGeneralManagerStorage()._feeRecipient == address(0) ? 0 : _getGeneralManagerStorage()._originationFeeRate;
-    // The USDX value of the fee collateral collected from compounding requests, deducted from the purchase amount
-    uint256 purchaseAmountFee;
 
     borrowAmounts = new uint256[](arrayLength);
     if (baseRequest.isCompounding) {
+      // The USDX value of the fee collateral, deducted from the purchase amount after the loop
+      uint256 purchaseAmountFee;
       for (uint256 i = 0; i < arrayLength; i++) {
         // If compounding, need to collect 1/2 of the collateral amount + commission fee (this is in the form of collateral)
         orderAmounts.collateralCollected += IOriginationPool(baseRequest.originationPools[i])
@@ -837,6 +837,14 @@ contract GeneralManager is
           purchaseAmountFee += feeCost;
         }
       }
+
+      // Deduct the fee collateral's cost from the purchase amount
+      if (purchaseAmountFee > 0) {
+        if (purchaseAmountFee >= orderAmounts.purchaseAmount) {
+          revert OriginationFeeExceedsPurchaseAmount(purchaseAmountFee, orderAmounts.purchaseAmount);
+        }
+        orderAmounts.purchaseAmount -= purchaseAmountFee;
+      }
     } else {
       for (uint256 i = 0; i < arrayLength; i++) {
         // If non-compounding, need to collect the full amountBorrowed in USDX + commission fee
@@ -855,14 +863,6 @@ contract GeneralManager is
           orderAmounts.usdxCollected += Math.mulDiv(_cost, originationFeeRate_, Constants.BPS, Math.Rounding.Ceil);
         }
       }
-    }
-
-    // Deduct the fee collateral's cost from the purchase amount
-    if (purchaseAmountFee > 0) {
-      if (purchaseAmountFee >= orderAmounts.purchaseAmount) {
-        revert OriginationFeeExceedsPurchaseAmount(purchaseAmountFee, orderAmounts.purchaseAmount);
-      }
-      orderAmounts.purchaseAmount -= purchaseAmountFee;
     }
 
     mortgageParams = MortgageParams({
