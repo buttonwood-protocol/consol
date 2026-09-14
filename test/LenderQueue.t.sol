@@ -356,8 +356,12 @@ contract LenderQueueTest is BaseTest, ILenderQueueEvents {
       consol.balanceOf(holder), amount + donationAmount, 1, "Holder should have absorbed the forfeited yield"
     );
 
-    // Make sure that lenderQueue has burned all of the excess shares
-    assertEq(consol.balanceOf(address(lenderQueue)), 0, "LenderQueue should have burned all of the excess shares");
+    // Make sure that lenderQueue has burned all of the excess shares.
+    // Transfers convert amount to shares rounding up while burnExcessShares keeps the rounded-down share count,
+    // so the queue can retain up to 1 wei of dust at extreme share prices.
+    assertApproxEqAbs(
+      consol.balanceOf(address(lenderQueue)), 0, 1, "LenderQueue should have burned all of the excess shares"
+    );
 
     // Validate that the withdrawal queue still has 1 request but that the amount and shares are 0
     assertEq(lenderQueue.withdrawalQueueLength(), 1, "Withdrawal queue should still have 1 request");
