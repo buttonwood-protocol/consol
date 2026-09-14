@@ -219,6 +219,30 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
   function setPriceSpread(uint16 priceSpread_) external;
 
   /**
+   * @notice The origination fee rate charged to the borrower on mortgage creation and balance sheet expansion, as basis points of the spread-adjusted collateral cost. No fee is charged while the fee recipient is unset.
+   * @return originationFeeRate The origination fee rate
+   */
+  function originationFeeRate() external view returns (uint16);
+
+  /**
+   * @notice Sets the origination fee rate
+   * @param originationFeeRate_ The origination fee rate
+   */
+  function setOriginationFeeRate(uint16 originationFeeRate_) external;
+
+  /**
+   * @notice The address receiving protocol fees
+   * @return feeRecipient The address receiving protocol fees
+   */
+  function feeRecipient() external view returns (address);
+
+  /**
+   * @notice Sets the address receiving protocol fees. Setting the zero address disables the origination fee.
+   * @param feeRecipient_ The address receiving protocol fees
+   */
+  function setFeeRecipient(address feeRecipient_) external;
+
+  /**
    * @notice Returns the conversion queues a given mortgage position is registered with
    * @param tokenId The tokenId of the mortgage position
    * @return The conversion queues

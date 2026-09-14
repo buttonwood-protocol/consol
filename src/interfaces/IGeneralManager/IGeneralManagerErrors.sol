@@ -130,4 +130,18 @@ interface IGeneralManagerErrors {
    * @param amount The amount of native gas to withdraw
    */
   error FailedToWithdrawNativeGas(uint256 amount);
+
+  /**
+   * @notice Thrown when the origination fee rate exceeds the maximum
+   * @param originationFeeRate The origination fee rate
+   * @param maximumRate The maximum origination fee rate
+   */
+  error OriginationFeeRateTooHigh(uint16 originationFeeRate, uint16 maximumRate);
+
+  /**
+   * @notice Thrown when the origination fee value is not covered by the purchase amount
+   * @param feeValue The origination fee value in USDX
+   * @param purchaseAmount The purchase amount
+   */
+  error OriginationFeeExceedsPurchaseAmount(uint256 feeValue, uint256 purchaseAmount);
 }
