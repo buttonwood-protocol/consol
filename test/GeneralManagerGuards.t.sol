@@ -2,8 +2,10 @@
 pragma solidity ^0.8.20;
 
 import {BaseTest} from "./BaseTest.t.sol";
+import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {Roles} from "../src/libraries/Roles.sol";
 import {IGeneralManagerErrors} from "../src/interfaces/IGeneralManager/IGeneralManager.sol";
 import {ConversionQueue} from "../src/ConversionQueue.sol";
 import {MortgagePosition} from "../src/types/MortgagePosition.sol";
@@ -162,6 +164,31 @@ contract GeneralManagerGuardsTest is BaseTest {
 
     // The escrowed USDX must be refunded to the expander
     assertEq(usdx.balanceOf(balanceSheetExpander), usdxToCollect, "Escrow should be refunded on expiry");
+  }
+
+  function test_burnMortgageNFT_directCallSkipsActivePosition() public {
+    _fundPoolAndWarpToDeployPhase();
+
+    // Create an active mortgage
+    _requestNoncompoundingPaymentPlanMortgage(borrower, "mortgage1", 100_000e18, 2e8, address(0));
+
+    // Grant the NFT role to the admin and attempt a direct burn of the active mortgage
+    vm.startPrank(admin);
+    IAccessControl(address(generalManager)).grantRole(Roles.NFT_ROLE, admin);
+    generalManager.burnMortgageNFT(1);
+    vm.stopPrank();
+
+    // The active mortgage NFT must survive
+    assertEq(mortgageNFT.ownerOf(1), borrower, "Active mortgage NFT should not be burned");
+  }
+
+  function test_burnMortgageNFT_revertsForNonexistentToken() public {
+    // Grant the NFT role to the admin and attempt to burn a token that was never minted
+    vm.startPrank(admin);
+    IAccessControl(address(generalManager)).grantRole(Roles.NFT_ROLE, admin);
+    vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 0));
+    generalManager.burnMortgageNFT(0);
+    vm.stopPrank();
   }
 
   function test_burnMortgageNFT_stillBurnsExpiredCreationReceipt() public {
