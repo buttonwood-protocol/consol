@@ -175,17 +175,30 @@ contract MortgageMathTest is Test {
     // Skip time forward
     skip(timePassed);
 
-    // Calculate the expected periods since term origination
-    if (timePassed > latePaymentWindow) {
-      timePassed -= latePaymentWindow; // Subtract the late payment window from the time passed to factor in the late payment window in the calculation
-    }
-    uint8 expectedPeriodsSinceTermOrigination = uint8(timePassed / Constants.PERIOD_DURATION);
+    // Calculate the expected periods since term origination.
+    // The library treats the late payment window inclusively: a payment landing exactly latePaymentWindow
+    // after a period tick is still on time, so the period only counts once strictly more time has passed.
+    uint8 expectedPeriodsSinceTermOrigination =
+      timePassed > latePaymentWindow ? uint8((timePassed - latePaymentWindow - 1) / Constants.PERIOD_DURATION) : 0;
 
     // Validate the periodsSinceTermOrigination is correct
     assertEq(
       mortgagePosition.periodsSinceTermOrigination(latePaymentWindow),
       expectedPeriodsSinceTermOrigination,
       "periodsSinceTermOrigination should be the same as expectedPeriodsSinceTermOrigination"
+    );
+  }
+
+  function test_periodsSinceTermOrigination_atExactWindowBoundary() public {
+    // Elapsed time of exactly 3 periods + the late payment window: the boundary payment is still on time,
+    // so only 2 periods count
+    MortgagePosition memory mortgagePosition;
+    mortgagePosition.termOriginated = uint32(block.timestamp);
+    skip(3 * Constants.PERIOD_DURATION + Constants.LATE_PAYMENT_WINDOW);
+    assertEq(
+      mortgagePosition.periodsSinceTermOrigination(Constants.LATE_PAYMENT_WINDOW),
+      2,
+      "The period should only count once strictly more than the late payment window has passed"
     );
   }
 
