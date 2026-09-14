@@ -70,6 +70,8 @@ contract GeneralManager is
    * @param _conversionQueues Mapping of collateral address to conversion queues
    * @param _mortgageEnqueued Mapping of tokenId to conversion queue to enqueued status
    * @param _paused Whether the contract is paused
+   * @param _originationFeeRate Origination fee rate in basis points (BPS)
+   * @param _feeRecipient Address receiving protocol fees
    */
   struct GeneralManagerStorage {
     address _usdx;
@@ -90,6 +92,8 @@ contract GeneralManager is
     mapping(uint256 => address[]) _conversionQueues;
     mapping(uint256 => mapping(address => bool)) _mortgageEnqueued;
     bool _paused;
+    uint16 _originationFeeRate;
+    address _feeRecipient;
   }
 
   /**
@@ -717,6 +721,40 @@ contract GeneralManager is
   /**
    * @inheritdoc IGeneralManager
    */
+  function setOriginationFeeRate(uint16 originationFeeRate_) external onlyRole(Roles.DEFAULT_ADMIN_ROLE) {
+    // Validate that the origination fee rate does not exceed the maximum
+    if (originationFeeRate_ > Constants.MAX_ORIGINATION_FEE_RATE) {
+      revert OriginationFeeRateTooHigh(originationFeeRate_, Constants.MAX_ORIGINATION_FEE_RATE);
+    }
+    emit OriginationFeeRateSet(_getGeneralManagerStorage()._originationFeeRate, originationFeeRate_);
+    _getGeneralManagerStorage()._originationFeeRate = originationFeeRate_;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
+  function originationFeeRate() external view returns (uint16) {
+    return _getGeneralManagerStorage()._originationFeeRate;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
+  function setFeeRecipient(address feeRecipient_) external onlyRole(Roles.DEFAULT_ADMIN_ROLE) {
+    emit FeeRecipientSet(_getGeneralManagerStorage()._feeRecipient, feeRecipient_);
+    _getGeneralManagerStorage()._feeRecipient = feeRecipient_;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
+  function feeRecipient() external view returns (address) {
+    return _getGeneralManagerStorage()._feeRecipient;
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
   function conversionQueues(uint256 tokenId) public view returns (address[] memory) {
     return _getGeneralManagerStorage()._conversionQueues[tokenId];
   }
@@ -771,8 +809,14 @@ contract GeneralManager is
       revert OriginationPoolsListLengthMismatch(arrayLength, baseRequest.collateralAmounts.length);
     }
 
+    // The origination fee is disabled while the fee recipient is unset
+    uint16 originationFeeRate_ =
+      _getGeneralManagerStorage()._feeRecipient == address(0) ? 0 : _getGeneralManagerStorage()._originationFeeRate;
+
     borrowAmounts = new uint256[](arrayLength);
     if (baseRequest.isCompounding) {
+      // The USDX value of the fee collateral, deducted from the purchase amount after the loop
+      uint256 purchaseAmountFee;
       for (uint256 i = 0; i < arrayLength; i++) {
         // If compounding, need to collect 1/2 of the collateral amount + commission fee (this is in the form of collateral)
         orderAmounts.collateralCollected += IOriginationPool(baseRequest.originationPools[i])
@@ -784,6 +828,22 @@ contract GeneralManager is
         orderAmounts.purchaseAmount += (2 * _cost)
           - IOriginationPool(baseRequest.originationPools[i]).calculateReturnAmount(_cost);
         mortgageParams.collateralAmount += baseRequest.collateralAmounts[i];
+        if (originationFeeRate_ > 0) {
+          // Collect the origination fee as extra collateral; its cost is deducted from the purchase amount so it surfaces as surplus USDX for the fee recipient
+          uint256 feeCollateral =
+            Math.mulDiv(baseRequest.collateralAmounts[i], originationFeeRate_, Constants.BPS, Math.Rounding.Ceil);
+          (uint256 feeCost,) = _calculateCost(collateral, feeCollateral);
+          orderAmounts.collateralCollected += feeCollateral;
+          purchaseAmountFee += feeCost;
+        }
+      }
+
+      // Deduct the fee collateral's cost from the purchase amount
+      if (purchaseAmountFee > 0) {
+        if (purchaseAmountFee >= orderAmounts.purchaseAmount) {
+          revert OriginationFeeExceedsPurchaseAmount(purchaseAmountFee, orderAmounts.purchaseAmount);
+        }
+        orderAmounts.purchaseAmount -= purchaseAmountFee;
       }
     } else {
       for (uint256 i = 0; i < arrayLength; i++) {
@@ -798,6 +858,10 @@ contract GeneralManager is
           orderAmounts.usdxCollected += 1;
         }
         mortgageParams.collateralAmount += baseRequest.collateralAmounts[i];
+        if (originationFeeRate_ > 0) {
+          // Collect the origination fee as extra USDX so it surfaces as surplus for the fee recipient
+          orderAmounts.usdxCollected += Math.mulDiv(_cost, originationFeeRate_, Constants.BPS, Math.Rounding.Ceil);
+        }
       }
     }
 
@@ -1029,8 +1093,21 @@ contract GeneralManager is
     IOriginationPool(originationParameters.originationPools[0])
       .deploy(originationParameters.borrowAmounts[0], abi.encode(originationParameters, 0));
 
-    // Send the rest of the USDX in the contract to the fulfiller (should be equal to purchaseAmount)
-    IERC20($._usdx).safeTransfer(originationParameters.fulfiller, IERC20($._usdx).balanceOf(address(this)));
+    // Send the purchaseAmount of USDX to the fulfiller and any surplus (origination fee + rounding dust) to the fee recipient
+    // With no fee recipient set, the full balance goes to the fulfiller (should be equal to purchaseAmount)
+    address feeRecipient_ = $._feeRecipient;
+    uint256 usdxBalance = IERC20($._usdx).balanceOf(address(this));
+    if (feeRecipient_ == address(0)) {
+      IERC20($._usdx).safeTransfer(originationParameters.fulfiller, usdxBalance);
+    } else {
+      uint256 fulfillerAmount = Math.min(usdxBalance, originationParameters.purchaseAmount);
+      IERC20($._usdx).safeTransfer(originationParameters.fulfiller, fulfillerAmount);
+      uint256 surplus = usdxBalance - fulfillerAmount;
+      if (surplus > 0) {
+        IERC20($._usdx).safeTransfer(feeRecipient_, surplus);
+        emit OriginationFeeCollected(originationParameters.mortgageParams.tokenId, feeRecipient_, surplus);
+      }
+    }
   }
 
   /**

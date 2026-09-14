@@ -58,4 +58,10 @@ library Constants {
    * @return MAX_TOTAL_PERIODS The maximum number of periods for a mortgage
    */
   uint8 public constant MAX_TOTAL_PERIODS = 244;
+
+  /**
+   * @notice The maximum origination fee rate in basis points
+   * @return MAX_ORIGINATION_FEE_RATE The maximum origination fee rate in basis points
+   */
+  uint16 public constant MAX_ORIGINATION_FEE_RATE = 500;
 }

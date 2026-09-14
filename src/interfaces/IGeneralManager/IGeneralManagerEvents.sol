@@ -98,4 +98,26 @@ interface IGeneralManagerEvents {
    * @param newPriceSpread The new price spread
    */
   event PriceSpreadSet(uint16 oldPriceSpread, uint16 newPriceSpread);
+
+  /**
+   * @notice Emitted when the origination fee rate is set
+   * @param oldOriginationFeeRate The old origination fee rate
+   * @param newOriginationFeeRate The new origination fee rate
+   */
+  event OriginationFeeRateSet(uint16 oldOriginationFeeRate, uint16 newOriginationFeeRate);
+
+  /**
+   * @notice Emitted when the fee recipient is set
+   * @param oldFeeRecipient The old fee recipient
+   * @param newFeeRecipient The new fee recipient
+   */
+  event FeeRecipientSet(address oldFeeRecipient, address newFeeRecipient);
+
+  /**
+   * @notice Emitted when an origination fee is collected
+   * @param tokenId The tokenId of the mortgage position the fee was collected for
+   * @param feeRecipient The address that received the fee
+   * @param amount The amount of USDX sent to the fee recipient
+   */
+  event OriginationFeeCollected(uint256 indexed tokenId, address indexed feeRecipient, uint256 amount);
 }
