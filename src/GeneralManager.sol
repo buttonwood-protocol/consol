@@ -263,6 +263,7 @@ contract GeneralManager is
    * @dev Appends the conversionQueueList to the recorded conversion queues for a mortgage position
    * @param tokenId The tokenId of the mortgage position
    * @param conversionQueueList The list of conversion queues to update
+   * @param collateral The collateral of the mortgage position
    */
   function _addConversionQueues(uint256 tokenId, address[] memory conversionQueueList, address collateral) internal {
     // Fetch storage
