@@ -22,7 +22,7 @@ contract DeployPriceOracles is DeployInterestOracle, CollateralSetup {
 
   function run() public virtual override(DeployInterestOracle, CollateralSetup) {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     if (!usesChainlinkPriceOracles()) {
       pyth = getOrCreatePyth();
     }

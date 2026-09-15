@@ -14,7 +14,7 @@ contract DeployNFTMetadataGenerator is BaseScript {
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployNFTMetadataGenerator();
     vm.stopBroadcast();
   }

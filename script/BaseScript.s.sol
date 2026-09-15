@@ -16,7 +16,7 @@ contract BaseScript is Script {
 
   function setUp() public virtual {
     deployerAddress = vm.envAddress("DEPLOYER_ADDRESS");
-    deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
+    deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(0));
     getAdmins();
     isTest = vm.envBool("IS_TEST");
     isTestnet = vm.envBool("IS_TESTNET");
@@ -27,7 +27,23 @@ contract BaseScript is Script {
       }
     }
 
-    require(deployerAddress == vm.addr(deployerPrivateKey), "Deployer address and private key do not match");
+    if (deployerPrivateKey != 0) {
+      require(deployerAddress == vm.addr(deployerPrivateKey), "Deployer address and private key do not match");
+    }
+  }
+
+  /**
+   * @notice Starts a broadcast signed by the deployer.
+   * @dev With DEPLOYER_PRIVATE_KEY set, signs with it. With it unset, broadcasts as
+   * DEPLOYER_ADDRESS so the signature comes from the CLI wallet flags
+   * (e.g. --ledger --mnemonic-indexes N); a wallet for a different address fails loudly.
+   */
+  function startDeployerBroadcast() internal {
+    if (deployerPrivateKey != 0) {
+      vm.startBroadcast(deployerPrivateKey);
+    } else {
+      vm.startBroadcast(deployerAddress);
+    }
   }
 
   function getAdmins() public {
@@ -53,7 +69,7 @@ contract BaseScript is Script {
   }
 
   function run() public virtual {
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     vm.stopBroadcast();
   }
 }

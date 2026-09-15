@@ -35,7 +35,7 @@ contract LocalhostSetupPart3 is BaseScript {
   }
 
   function run() public override(BaseScript) {
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
 
     // Redeem entire balance from the origination pool
     originationPool0.redeem(IERC20(address(originationPool0)).balanceOf(deployerAddress));

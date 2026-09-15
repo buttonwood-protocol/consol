@@ -15,7 +15,7 @@ contract DeployForfeitedAssetsPool is CollateralSetup {
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployForfeitedAssetsPool();
     vm.stopBroadcast();
   }

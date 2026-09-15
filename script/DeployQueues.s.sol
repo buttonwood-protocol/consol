@@ -23,7 +23,7 @@ contract DeployQueues is DeployGeneralManager {
 
   function run() public virtual override(DeployGeneralManager) {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployProcessor();
     deployUsdxQueue();
     deployForfeitedAssetsQueue();

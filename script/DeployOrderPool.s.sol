@@ -16,7 +16,7 @@ contract DeployOrderPool is DeployGeneralManager {
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployOrderPool();
     vm.stopBroadcast();
   }
