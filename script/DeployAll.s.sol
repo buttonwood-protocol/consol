@@ -14,6 +14,9 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
 
   function setUp() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
     BaseScript.setUp();
+    // DeployAll skips the intermediate setUps, so read the extra deploy configuration here
+    setPriceOracleType(vm.envOr("PRICE_ORACLE_TYPE", string("pyth")));
+    readOriginationFeeConfig();
   }
 
   function run() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
@@ -34,8 +37,10 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployYieldStrategies(); // Disabled for production
     // Deploy Consol
     deployConsol();
-    // Get or create the pyth oracle
-    getOrCreatePyth();
+    // Get or create the pyth oracle (skipped when the deploy prices collateral with Chainlink feeds)
+    if (!usesChainlinkPriceOracles()) {
+      getOrCreatePyth();
+    }
     // Deploy InterestOracle that reads from the PythOracle
     deployInterestOracle();
     // Deploy PriceOracles that read from the PythOracle
@@ -44,6 +49,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployNFTMetadataGenerator(); // Disabled for production
     // Deploy GeneralManager
     deployGeneralManager();
+    // Configure the origination fee
+    configureOriginationFee();
     // Deploy Processor
     deployProcessor();
     // Deploy UsdxQueue
@@ -167,8 +174,10 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     json = logYieldStrategies(obj);
     // Log the consol address
     json = logConsol(obj);
-    // Log the pyth oracle address
-    json = logPyth(obj);
+    // Log the pyth oracle address (omitted when the deploy did not use one)
+    if (address(pyth) != address(0)) {
+      json = logPyth(obj);
+    }
     // Log the interest oracle address
     json = logInterestOracle(obj);
     // Log the price oracle addresses
