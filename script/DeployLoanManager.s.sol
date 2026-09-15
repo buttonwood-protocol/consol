@@ -17,7 +17,7 @@ contract DeployLoanManager is DeployGeneralManager, DeployNFTMetadataGenerator {
 
   function run() public virtual override(DeployGeneralManager, DeployNFTMetadataGenerator) {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployLoanManager();
     vm.stopBroadcast();
   }

@@ -41,7 +41,7 @@ contract LocalhostSetupPart1 is BaseScript {
   }
 
   function run() public override(BaseScript) {
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
 
     // Deploy the first origination pool config
     originationPool0 =

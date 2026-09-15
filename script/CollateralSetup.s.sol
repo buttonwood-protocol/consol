@@ -21,7 +21,7 @@ contract CollateralSetup is BaseScript {
 
   function run() public virtual override {
     BaseScript.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     setupOrDeployCollaterals();
     setupOrDeployUSDTokens();
     vm.stopBroadcast();

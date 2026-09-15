@@ -19,7 +19,7 @@ contract DeployConsol is DeployUSDX, DeployForfeitedAssetsPool, DeploySubConsols
 
   function run() public virtual override(DeployUSDX, DeployForfeitedAssetsPool, DeploySubConsols) {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployConsol();
     vm.stopBroadcast();
   }

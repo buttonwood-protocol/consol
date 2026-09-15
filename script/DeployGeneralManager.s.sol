@@ -36,7 +36,7 @@ contract DeployGeneralManager is DeployPriceOracles, DeployConsol {
 
   function run() public virtual override(DeployPriceOracles, DeployConsol) {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployGeneralManager();
     vm.stopBroadcast();
   }

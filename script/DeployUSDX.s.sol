@@ -15,7 +15,7 @@ contract DeployUSDX is CollateralSetup {
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployUSDX();
     vm.stopBroadcast();
   }

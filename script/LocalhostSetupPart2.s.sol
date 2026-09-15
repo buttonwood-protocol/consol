@@ -65,7 +65,7 @@ contract LocalhostSetupPart2 is BaseScript {
 
   function run() public override(BaseScript) {
     // Start broadcasting from deployer
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
 
     // Give permission to the general manager to take the borrower's down payment (rest of the usdx)
     usdx.approve(address(generalManager), 50_500 * 1e18);

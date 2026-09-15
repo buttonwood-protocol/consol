@@ -19,7 +19,7 @@ contract DeploySubConsols is CollateralSetup {
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deploySubConsols();
     deployYieldStrategies();
     vm.stopBroadcast();

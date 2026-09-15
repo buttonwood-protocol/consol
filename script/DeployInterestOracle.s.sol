@@ -17,7 +17,7 @@ contract DeployInterestOracle is BaseScript {
 
   function run() public virtual override {
     super.run();
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     deployInterestOracle();
     vm.stopBroadcast();
   }

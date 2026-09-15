@@ -20,7 +20,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
   }
 
   function run() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
-    vm.startBroadcast(deployerPrivateKey);
+    startDeployerBroadcast();
     // Deploy Collaterals
     setupOrDeployCollaterals();
     // Deploy USD Tokens

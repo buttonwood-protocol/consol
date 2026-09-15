@@ -34,8 +34,8 @@ contract DeploySimpleOracle is Script {
   SimpleOraclePriceOracle[] public priceOracles;
 
   function setUp() public virtual {
-    deployerPrivateKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
-    deployerAddress = vm.addr(deployerPrivateKey);
+    deployerPrivateKey = vm.envOr("DEPLOYER_PRIVATE_KEY", uint256(0));
+    deployerAddress = deployerPrivateKey != 0 ? vm.addr(deployerPrivateKey) : vm.envAddress("DEPLOYER_ADDRESS");
     isTest = vm.envOr("IS_TEST", false);
   }
 
@@ -54,7 +54,11 @@ contract DeploySimpleOracle is Script {
       "Deployer does not hold DEFAULT_ADMIN_ROLE on the GeneralManager"
     );
 
-    vm.startBroadcast(deployerPrivateKey);
+    if (deployerPrivateKey != 0) {
+      vm.startBroadcast(deployerPrivateKey);
+    } else {
+      vm.startBroadcast(deployerAddress);
+    }
     simpleOracle = new SimpleOracle(admin, signer);
     deployPriceOracles();
     vm.stopBroadcast();
