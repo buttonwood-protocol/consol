@@ -8,14 +8,30 @@ import {DeployConsol} from "./DeployConsol.s.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {IConversionQueue} from "../src/interfaces/IConversionQueue/IConversionQueue.sol";
+import {Constants} from "../src/libraries/Constants.sol";
 import {Roles} from "../src/libraries/Roles.sol";
 
 contract DeployGeneralManager is DeployPriceOracles, DeployConsol {
   GeneralManager public generalManagerImplementation;
   IGeneralManager public generalManager;
+  address public feeRecipient;
+  uint16 public originationFeeRate;
 
   function setUp() public virtual override(DeployPriceOracles, DeployConsol) {
     super.setUp();
+    readOriginationFeeConfig();
+  }
+
+  /// @dev Read and validate before broadcasting, so a missing or bad env value aborts the deploy up front
+  function readOriginationFeeConfig() public {
+    feeRecipient = vm.envAddress("FEE_RECIPIENT");
+    require(feeRecipient != address(0), "FEE_RECIPIENT is the zero address");
+    uint256 originationFeeRate_ = vm.envUint("ORIGINATION_FEE_RATE_BPS");
+    require(
+      originationFeeRate_ <= Constants.MAX_ORIGINATION_FEE_RATE,
+      "ORIGINATION_FEE_RATE_BPS exceeds MAX_ORIGINATION_FEE_RATE"
+    );
+    originationFeeRate = uint16(originationFeeRate_);
   }
 
   function run() public virtual override(DeployPriceOracles, DeployConsol) {
@@ -54,6 +70,11 @@ contract DeployGeneralManager is DeployPriceOracles, DeployConsol {
     for (uint256 i = 0; i < collateralTokens.length; i++) {
       generalManager.setPriceOracle(address(collateralTokens[i]), address(priceOracles[i]));
     }
+  }
+
+  function configureOriginationFee() public {
+    generalManager.setFeeRecipient(feeRecipient);
+    generalManager.setOriginationFeeRate(originationFeeRate);
   }
 
   function setSupportedPeriodTerms(IERC20Metadata[] memory collateralTokens) public {

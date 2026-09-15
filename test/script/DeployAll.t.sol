@@ -7,6 +7,7 @@ import {DeployAll} from "../../script/DeployAll.s.sol";
 contract DeployAllTest is Test {
   address public admin1;
   address public admin2;
+  address public feeRecipient;
   address public deployerAddress;
   uint256 public deployerPrivateKey;
   DeployAll public deployAll;
@@ -70,6 +71,12 @@ contract DeployAllTest is Test {
     vm.setEnv("MAXIMUM_CAP_0", "1000000000000000000000000");
     vm.setEnv("MAXIMUM_CAP_1", "1000000000000000000000000");
     vm.setEnv("INSURANCE_FUND", vm.toString(deployerAddress));
+    // makeAddr is deterministic per label, so parallel suites always write the same value here.
+    // The rate stays 0 in the shared scaffolding: the integration suites pin zero-fee borrower flows.
+    // DeployAllOriginationFeeTest covers a nonzero rate.
+    feeRecipient = makeAddr("Fee Recipient");
+    vm.setEnv("FEE_RECIPIENT", vm.toString(feeRecipient));
+    vm.setEnv("ORIGINATION_FEE_RATE_BPS", "0");
     vm.setEnv("NFT_NAME", "Buttonwood Mortgage");
     vm.setEnv("NFT_SYMBOL", "BMT");
     vm.setEnv("INITIAL_ORIGINATION_POOL_CONFIG_LENGTH", "3");
@@ -105,13 +112,28 @@ contract DeployAllTest is Test {
     vm.setEnv("CONVERSION_WITHDRAWAL_GAS_FEE", "10000000000000000");
     vm.setEnv("USDX_WITHDRAWAL_GAS_FEE", "10000000000000000");
     vm.setEnv("FORFEITED_ASSETS_WITHDRAWAL_GAS_FEE", "10000000000000000");
-    deployAll = new DeployAll();
-    deployAll.setAddressesFileSuffix(testId());
-    deployAll.setUp();
+    // A parallel suite may transiently write a nonzero ORIGINATION_FEE_RATE_BPS (DeployAllOriginationFeeTest),
+    // so verify what the script actually read and retry, mirroring DeployAllRoleInvariants.t.sol
+    for (uint256 attempt = 0; attempt < 20; attempt++) {
+      vm.setEnv("ORIGINATION_FEE_RATE_BPS", "0");
+      deployAll = new DeployAll();
+      deployAll.setAddressesFileSuffix(testId());
+      deployAll.setUp();
+      if (deployAll.originationFeeRate() == 0 && deployAll.feeRecipient() == feeRecipient) {
+        return;
+      }
+    }
+    revert("DeployAllTest: could not build DeployAll with a zero origination fee rate");
   }
 
   function run() public virtual {
     deployAll.run();
+
+    // The origination fee is configured from the env values the script read
+    assertEq(deployAll.generalManager().feeRecipient(), deployAll.feeRecipient(), "Fee recipient mismatch");
+    assertEq(
+      deployAll.generalManager().originationFeeRate(), deployAll.originationFeeRate(), "Origination fee rate mismatch"
+    );
   }
 
   function test_run() public {

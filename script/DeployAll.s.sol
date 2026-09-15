@@ -14,8 +14,9 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
 
   function setUp() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
     BaseScript.setUp();
-    // DeployAll skips the intermediate setUps, so read the oracle type here
+    // DeployAll skips the intermediate setUps, so read the extra deploy configuration here
     setPriceOracleType(vm.envOr("PRICE_ORACLE_TYPE", string("pyth")));
+    readOriginationFeeConfig();
   }
 
   function run() public override(DeployOriginationScheduler, DeployOrderPool, DeployLoanManager, DeployQueues) {
@@ -48,6 +49,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployNFTMetadataGenerator(); // Disabled for production
     // Deploy GeneralManager
     deployGeneralManager();
+    // Configure the origination fee
+    configureOriginationFee();
     // Deploy Processor
     deployProcessor();
     // Deploy UsdxQueue
