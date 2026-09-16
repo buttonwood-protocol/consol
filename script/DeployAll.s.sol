@@ -33,8 +33,10 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployForfeitedAssetsPool();
     // Deploy SubConsols
     deploySubConsols();
-    // Deploy YieldStrategies
-    deployYieldStrategies(); // Disabled for production
+    // Deploy YieldStrategies (mocks; production SubConsols launch without one)
+    if (isTest || isTestnet) {
+      deployYieldStrategies();
+    }
     // Deploy Consol
     deployConsol();
     // Get or create the pyth oracle (skipped when the deploy prices collateral with Chainlink feeds)
@@ -45,8 +47,10 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployInterestOracle();
     // Deploy PriceOracles that read from the PythOracle
     deployPriceOracles();
-    // Deploy NFTMetadataGenerator
-    deployNFTMetadataGenerator(); // Disabled for production
+    // Deploy NFTMetadataGenerator (mock; production LoanManager launches with none)
+    if (isTest || isTestnet) {
+      deployNFTMetadataGenerator();
+    }
     // Deploy GeneralManager
     deployGeneralManager();
     // Configure the origination fee
