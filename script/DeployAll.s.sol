@@ -47,10 +47,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployInterestOracle();
     // Deploy PriceOracles that read from the PythOracle
     deployPriceOracles();
-    // Deploy NFTMetadataGenerator (mock; production LoanManager launches with none)
-    if (isTest || isTestnet) {
-      deployNFTMetadataGenerator();
-    }
+    // Deploy NFTMetadataGenerator (the UUPS proxy in production, the settable mock in test/testnet)
+    deployNFTMetadataGenerator();
     // Deploy GeneralManager
     deployGeneralManager();
     // Configure the origination fee
@@ -121,6 +119,10 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     assertContractRoleInvariants(address(orderPool), "OrderPool");
     assertContractRoleInvariants(address(generalManager), "GeneralManager");
     assertContractRoleInvariants(address(originationPoolScheduler), "OriginationPoolScheduler");
+    // The test/testnet metadata generator is the mock, which carries no roles
+    if (!isTest && !isTestnet) {
+      assertContractRoleInvariants(address(nftMetadataGenerator), "NFTMetadataGenerator");
+    }
   }
 
   /**
@@ -145,8 +147,12 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
   function getPath() public view returns (string memory path) {
     uint256 chainId = block.chainid;
     string memory root = vm.projectRoot();
+    // Only the unit tests set a suffix, so a real deploy always writes the chain file.
     // Explicitly excluding the localHost test to keep it in sync with local anvil deploys
-    if (isTest && keccak256(bytes(addressesFileSuffix)) != keccak256(bytes("LocalhostSetupTest"))) {
+    if (
+      bytes(addressesFileSuffix).length > 0
+        && keccak256(bytes(addressesFileSuffix)) != keccak256(bytes("LocalhostSetupTest"))
+    ) {
       path = string.concat(root, "/addresses/tests/addresses-", addressesFileSuffix, ".json");
     } else {
       path = string.concat(root, "/addresses/addresses-", vm.toString(chainId), ".json");

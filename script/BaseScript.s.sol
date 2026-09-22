@@ -46,6 +46,18 @@ contract BaseScript is Script {
     }
   }
 
+  /**
+   * @notice Overrides the deploy mode read from IS_TEST / IS_TESTNET.
+   * @dev Also callable from tests to select the deploy mode without touching process-global env vars,
+   * which forge shares across suites running in parallel.
+   * @param isTest_ Whether the deploy is a unit-test deploy
+   * @param isTestnet_ Whether the deploy targets a testnet
+   */
+  function setDeployMode(bool isTest_, bool isTestnet_) public {
+    isTest = isTest_;
+    isTestnet = isTestnet_;
+  }
+
   function getAdmins() public {
     uint256 adminLength = vm.envUint("ADMIN_LENGTH");
     for (uint256 i = 0; i < adminLength; i++) {
