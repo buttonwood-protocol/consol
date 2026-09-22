@@ -90,12 +90,12 @@ contract NFTMetadataGenerator is Initializable, AccessControlUpgradeable, UUPSUp
     returns (string memory metadata)
   {
     string memory json = string.concat(
-      '{"name":"',
+      "{\"name\":\"",
       NAME_PREFIX,
       mortgagePosition.tokenId.toString(),
-      '","description":"',
+      "\",\"description\":\"",
       DESCRIPTION,
-      '","attributes":[',
+      "\",\"attributes\":[",
       _attributes(mortgagePosition),
       "]}"
     );
@@ -211,7 +211,7 @@ contract NFTMetadataGenerator is Initializable, AccessControlUpgradeable, UUPSUp
     pure
     returns (string memory attribute)
   {
-    attribute = string.concat('{"trait_type":"', traitType, '","value":"', value, '"}');
+    attribute = string.concat("{\"trait_type\":\"", traitType, "\",\"value\":\"", value, "\"}");
   }
 
   /**
@@ -222,7 +222,7 @@ contract NFTMetadataGenerator is Initializable, AccessControlUpgradeable, UUPSUp
    * @return attribute The attribute object
    */
   function _numberAttribute(string memory traitType, uint256 value) internal pure returns (string memory attribute) {
-    attribute = string.concat('{"trait_type":"', traitType, '","value":', value.toString(), "}");
+    attribute = string.concat("{\"trait_type\":\"", traitType, "\",\"value\":", value.toString(), "}");
   }
 
   /**
@@ -243,7 +243,7 @@ contract NFTMetadataGenerator is Initializable, AccessControlUpgradeable, UUPSUp
    * @return attribute The attribute object
    */
   function _boolAttribute(string memory traitType, bool value) internal pure returns (string memory attribute) {
-    attribute = string.concat('{"trait_type":"', traitType, '","value":', value ? "true" : "false", "}");
+    attribute = string.concat("{\"trait_type\":\"", traitType, "\",\"value\":", value ? "true" : "false", "}");
   }
 
   /**
