@@ -5,7 +5,6 @@ import {BaseScript} from "./BaseScript.s.sol";
 import {INFTMetadataGenerator} from "../src/interfaces/INFTMetadataGenerator.sol";
 import {NFTMetadataGenerator} from "../src/NFTMetadataGenerator.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {MockNFTMetadataGenerator} from "../test/mocks/MockNFTMetadataGenerator.sol";
 import {Roles} from "../src/libraries/Roles.sol";
 
 contract DeployNFTMetadataGenerator is BaseScript {
@@ -25,15 +24,9 @@ contract DeployNFTMetadataGenerator is BaseScript {
 
   /**
    * @notice Deploys the NFT metadata generator the LoanManager's MortgageNFT will point at.
-   * @dev The pointer is immutable on the NFT, so production gets the UUPS proxy rather than the
-   * implementation. Test and testnet keep the mock, whose metadata string is settable.
+   * @dev The pointer is immutable on the NFT, so the NFT gets the UUPS proxy rather than the implementation.
    */
   function deployNFTMetadataGenerator() public {
-    if (isTest || isTestnet) {
-      nftMetadataGenerator = new MockNFTMetadataGenerator();
-      return;
-    }
-
     nftMetadataGeneratorImplementation = new NFTMetadataGenerator();
     bytes memory initializerData = abi.encodeCall(NFTMetadataGenerator.initialize, (deployerAddress));
     ERC1967Proxy proxy = new ERC1967Proxy(address(nftMetadataGeneratorImplementation), initializerData);

@@ -47,7 +47,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployInterestOracle();
     // Deploy PriceOracles that read from the PythOracle
     deployPriceOracles();
-    // Deploy NFTMetadataGenerator (the UUPS proxy in production, the settable mock in test/testnet)
+    // Deploy NFTMetadataGenerator (UUPS proxy)
     deployNFTMetadataGenerator();
     // Deploy GeneralManager
     deployGeneralManager();
@@ -119,10 +119,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     assertContractRoleInvariants(address(orderPool), "OrderPool");
     assertContractRoleInvariants(address(generalManager), "GeneralManager");
     assertContractRoleInvariants(address(originationPoolScheduler), "OriginationPoolScheduler");
-    // The test/testnet metadata generator is the mock, which carries no roles
-    if (!isTest && !isTestnet) {
-      assertContractRoleInvariants(address(nftMetadataGenerator), "NFTMetadataGenerator");
-    }
+    assertContractRoleInvariants(address(nftMetadataGenerator), "NFTMetadataGenerator");
   }
 
   /**
