@@ -33,8 +33,10 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployForfeitedAssetsPool();
     // Deploy SubConsols
     deploySubConsols();
-    // Deploy YieldStrategies
-    deployYieldStrategies(); // Disabled for production
+    // Deploy YieldStrategies (mocks; production SubConsols launch without one)
+    if (isTest || isTestnet) {
+      deployYieldStrategies();
+    }
     // Deploy Consol
     deployConsol();
     // Get or create the pyth oracle (skipped when the deploy prices collateral with Chainlink feeds)
@@ -45,8 +47,8 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     deployInterestOracle();
     // Deploy PriceOracles that read from the PythOracle
     deployPriceOracles();
-    // Deploy NFTMetadataGenerator
-    deployNFTMetadataGenerator(); // Disabled for production
+    // Deploy NFTMetadataGenerator (UUPS proxy)
+    deployNFTMetadataGenerator();
     // Deploy GeneralManager
     deployGeneralManager();
     // Configure the origination fee
@@ -117,6 +119,7 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
     assertContractRoleInvariants(address(orderPool), "OrderPool");
     assertContractRoleInvariants(address(generalManager), "GeneralManager");
     assertContractRoleInvariants(address(originationPoolScheduler), "OriginationPoolScheduler");
+    assertContractRoleInvariants(address(nftMetadataGenerator), "NFTMetadataGenerator");
   }
 
   /**
@@ -141,8 +144,12 @@ contract DeployAll is DeployOriginationScheduler, DeployOrderPool, DeployLoanMan
   function getPath() public view returns (string memory path) {
     uint256 chainId = block.chainid;
     string memory root = vm.projectRoot();
+    // Only the unit tests set a suffix, so a real deploy always writes the chain file.
     // Explicitly excluding the localHost test to keep it in sync with local anvil deploys
-    if (isTest && keccak256(bytes(addressesFileSuffix)) != keccak256(bytes("LocalhostSetupTest"))) {
+    if (
+      bytes(addressesFileSuffix).length > 0
+        && keccak256(bytes(addressesFileSuffix)) != keccak256(bytes("LocalhostSetupTest"))
+    ) {
       path = string.concat(root, "/addresses/tests/addresses-", addressesFileSuffix, ".json");
     } else {
       path = string.concat(root, "/addresses/addresses-", vm.toString(chainId), ".json");
