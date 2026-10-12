@@ -327,8 +327,28 @@ contract GenesisPoolTest is DeployAllTest {
     launch.run();
   }
 
-  function test_launch_revertsLateWhenResumingADeploy() public {
+  function test_launch_lateGenesisConfigIsRemovedWithoutDeploy() public {
     _partialLaunch(true);
+    address predicted = scheduler.predictOriginationPool(launch.genesisConfigId());
+    vm.warp(epochStart + 1 hours + 1);
+    launch.run();
+    assertEq(uint8(launch.launchState()), uint8(GenesisPoolLaunch.LaunchState.GENESIS_LATE), "launch state");
+    assertEq(scheduler.configLength(), 0, "configs left on the scheduler");
+    assertEq(predicted.code.length, 0, "pool deployed past the window");
+    assertEq(address(launch.genesisPool()), address(0), "genesis pool set");
+
+    // The next boundary resumes from {}
+    epochStart += Constants.EPOCH_DURATION;
+    vm.warp(epochStart + 5 minutes);
+    address next = _schedulerPrediction();
+    GenesisPoolLaunch again = _newLaunch();
+    again.run();
+    assertEq(uint8(again.launchState()), uint8(GenesisPoolLaunch.LaunchState.EMPTY), "launch state next day");
+    _assertLaunched(address(again.genesisPool()), next);
+  }
+
+  function test_launch_revertsLateFromEmpty() public {
+    _partialLaunch(false);
     vm.warp(epochStart + 1 hours + 1);
     vm.expectRevert(bytes("too long after the 12:00 UTC epoch boundary; see GENESIS_MAX_EPOCH_ELAPSED"));
     launch.run();

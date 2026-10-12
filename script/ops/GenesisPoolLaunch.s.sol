@@ -22,6 +22,7 @@ import {Roles} from "../../src/libraries/Roles.sol";
  *        EMPTY            {}, no genesis pool this epoch       -> add genesis, deploy, remove genesis
  *        GENESIS          {genesis}, not deployed              -> deploy, remove genesis
  *        GENESIS_DEPLOYED {genesis}, deployed this epoch       -> remove genesis
+ *        GENESIS_LATE     {genesis}, not deployed, past window -> remove genesis; re-run after 12:00 UTC
  *        DONE             {}, genesis pool deployed this epoch -> nothing
  *      Phase timestamps anchor to the start of the current epoch (12:00 UTC), not to the broadcast time,
  *      so every second past the boundary shortens the deposit phase. A run that deploys refuses when more
@@ -41,6 +42,7 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     EMPTY,
     GENESIS,
     GENESIS_DEPLOYED,
+    GENESIS_LATE,
     DONE
   }
 
@@ -91,7 +93,14 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     uint256 epochStart = currentEpochStart();
     predictedPool = _predictGenesisPool(genesis, genesisId);
     launchState = _classify(dailyId, genesisId, epoch);
+    uint256 elapsed = block.timestamp - epochStart;
+    if (launchState == LaunchState.GENESIS && elapsed > maxEpochElapsed) {
+      launchState = LaunchState.GENESIS_LATE;
+    }
     console.log("Current epoch:", epoch);
+    console.log("Block timestamp:", block.timestamp);
+    console.log("Epoch start (12:00 UTC):", epochStart);
+    console.log("Seconds since epoch start:", elapsed);
     console.log("Launch state:", _stateName(launchState));
     console.log("Genesis pool (predicted):", predictedPool);
 
@@ -103,13 +112,10 @@ contract GenesisPoolLaunch is GenesisPoolBase {
       return;
     }
 
-    bool deploys = launchState != LaunchState.GENESIS_DEPLOYED;
+    bool deploys =
+      launchState == LaunchState.DAILY || launchState == LaunchState.EMPTY || launchState == LaunchState.GENESIS;
     if (deploys) {
       require(!scheduler.paused(), "scheduler is paused");
-      uint256 elapsed = block.timestamp - epochStart;
-      console.log("Block timestamp:", block.timestamp);
-      console.log("Epoch start (12:00 UTC):", epochStart);
-      console.log("Seconds since epoch start:", elapsed);
       require(elapsed <= maxEpochElapsed, "too long after the 12:00 UTC epoch boundary; see GENESIS_MAX_EPOCH_ELAPSED");
     }
 
@@ -137,6 +143,12 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     }
     scheduler.removeConfig(genesis);
     vm.stopBroadcast();
+
+    if (launchState == LaunchState.GENESIS_LATE) {
+      require(scheduler.configLength() == 0, "scheduler still has configs");
+      console.log("Genesis config removed without deploying; no pools until the launch is re-run after 12:00 UTC");
+      return;
+    }
 
     genesisPool = IOriginationPool(predictedPool);
     _checkPostconditions(genesis, epochStart);
@@ -219,7 +231,7 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     console.log("  deployPhaseTimestamp:", genesisPool.deployPhaseTimestamp());
     console.log("  redemptionPhaseTimestamp:", genesisPool.redemptionPhaseTimestamp());
     console.log("Scheduler configLength:", scheduler.configLength());
-    console.log("Record for the reopen and the roller:");
+    console.log("Simulated values; confirm on-chain with GenesisPoolVerify before recording:");
     console.log("  GENESIS_POOL_ADDRESS=%s", pool);
     console.log("  GENESIS_EXPECTED_DAILY_CONFIG_ID=%s", vm.toString(OPoolConfigId.unwrap(dailyId)));
   }
@@ -229,6 +241,7 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     if (state == LaunchState.EMPTY) return "EMPTY: add genesis, deploy, remove genesis";
     if (state == LaunchState.GENESIS) return "GENESIS: deploy, remove genesis";
     if (state == LaunchState.GENESIS_DEPLOYED) return "GENESIS_DEPLOYED: remove genesis";
+    if (state == LaunchState.GENESIS_LATE) return "GENESIS_LATE: remove genesis without deploying (past the window)";
     return "DONE: nothing to send";
   }
 }
