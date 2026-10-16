@@ -212,3 +212,68 @@ transactions landed differently):
 
 Commit the `broadcast/GenesisPoolLaunch.s.sol/4663/` record of the mainnet run the same way as
 other mainnet runs.
+
+## Borrow caps
+
+`SetBorrowCaps.s.sol` sets `GeneralManager.maximumCap` (and, when asked, `minimumCap`) for every
+collateral in the address book, from `ADMIN_ADDRESS_0`, in one broadcast: one `setMaximumCap`
+transaction per collateral (plus one `setMinimumCap` each when `BORROW_MIN_CAP` is set).
+
+Inputs:
+
+- `ADMIN_ADDRESS_0`: the signer. Must hold `DEFAULT_ADMIN_ROLE` on the GeneralManager.
+- `BORROW_MAX_CAP`: required, no default. USDX wei (18 decimals); `10000e18` is accepted.
+  Must be within `100e18`–`1_000_000e18`, otherwise it reverts naming the variable.
+- `BORROW_MIN_CAP`: optional. When set it is applied too and must be below `BORROW_MAX_CAP`.
+  When unset the on-chain minimums stay as they are, and the run reverts if any of them is not
+  below `BORROW_MAX_CAP`.
+- `COLLATERAL_FILTER`: optional, comma-separated collateral addresses. Restricts the run to those
+  collaterals; each must be in the address book's `collateralAddresses`.
+
+Pass the caps on the command line; do not put them in `.env`.
+
+Before broadcasting, the script checks the admin role, that the address book lists at least one
+collateral, and that each collateral has a price oracle on the GeneralManager. It skips any cap
+already at its target (logged as `unchanged`), so a re-run after a partial broadcast sends only
+what is missing, and a run with nothing to change sends nothing. After the broadcast it reads every
+cap back and logs symbol, address and old → new value per collateral. Those reads run against
+forge's local simulation; `verify()` reads the chain.
+
+### 4663: raise the maximum cap from 500 to 10,000 USDX
+
+GeneralManager `0xc127d8aBcbB08f7A5C0442AE5A24883027bd910C`, twelve collaterals. From
+`packages/contracts`:
+
+```bash
+# simulation only: prints the twelve changes, sends nothing
+BORROW_MAX_CAP=10000e18 forge script script/ops/SetBorrowCaps.s.sol --rpc-url robinhood
+
+# broadcast, with one of the wallet flags below
+BORROW_MAX_CAP=10000e18 forge script script/ops/SetBorrowCaps.s.sol --rpc-url robinhood \
+  --sender <ADMIN_ADDRESS_0> --broadcast --slow <wallet flags>
+
+# verify against the chain
+BORROW_MAX_CAP=10000e18 forge script script/ops/SetBorrowCaps.s.sol --sig 'verify()' --rpc-url robinhood
+```
+
+Wallet flags:
+
+| Flag | Signing |
+| --- | --- |
+| `--account <keystore>` | one password prompt, then every transaction is signed |
+| `--private-key $ADMIN_KEY` | no prompt; keep the key out of shell history and `.env` |
+| `--ledger --mnemonic-indexes N` | one confirmation on the device per transaction (twelve here) |
+
+`--slow` sends each transaction after the previous one is mined, so a failure stops the run
+cleanly. If the broadcast stops partway, re-run the same command: it sends only the caps still
+missing. Never use `forge script --resume`; it replays the recorded transactions without the checks.
+
+`verify()` reverts unless every selected collateral is at `BORROW_MAX_CAP` (and `BORROW_MIN_CAP`
+when set), and logs each collateral's maximum and minimum. Spot-check one by hand with:
+
+```bash
+cast call 0xc127d8aBcbB08f7A5C0442AE5A24883027bd910C "maximumCap(address)(uint256)" <collateral> --rpc-url robinhood
+```
+
+Commit the `broadcast/SetBorrowCaps.s.sol/4663/` record of the mainnet run the same way as other
+mainnet runs.
