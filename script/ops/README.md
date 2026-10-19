@@ -28,7 +28,12 @@ Inputs:
 - `GENESIS_POOL_ADDRESS`: the deployed genesis pool. Leave it unset (or set to the predicted,
   not yet deployed, address) for the launch. Set it as soon as the launch is verified: the reopen
   and verify scripts require it, and the launch refuses to run again once it points at a
-  registered pool ("genesis already launched"). The roller reads the same variable in genesis mode.
+  deployed pool other than the current epoch's genesis pool ("genesis already launched"), whether
+  or not that pool is still registered. Keep it set after a miss: deregistering the pool does not
+  reopen the launch. The roller reads the same variable in genesis mode.
+- `GENESIS_FORCE_RELAUNCH`: optional, default `false`. `true` bypasses the "genesis already
+  launched" guard and deploys a second genesis pool, with a warning naming the existing one.
+  Pass it on the command line for that one run; never put it in `.env`.
 - `GENESIS_EXPECTED_DAILY_CONFIG_ID`: required by the reopen. The launch logs it
   (`GENESIS_EXPECTED_DAILY_CONFIG_ID=0x…`); record it in the launch notes and in `.env`.
 
@@ -191,12 +196,15 @@ forge script script/ops/GenesisPoolReopenDaily.s.sol --rpc-url robinhood --sende
 GENESIS_POOL_ADDRESS=<genesis pool> forge script script/ops/GenesisPoolVerify.s.sol --rpc-url robinhood
 ```
 
-The reopen refuses unless the scheduler holds no configs, the genesis pool is registered and
-past DEPOSIT, and the daily config rebuilt from `INITIAL_ORIGINATION_POOL_0_*` has the recorded
-id. After the reopen, verify expects `configLength() == 1` with the daily config and the pool past
-DEPOSIT. The reopened daily config has the same id as before, but `removeConfig` deleted its
-deployment record, so the first daily pool after reopening is sized at `defaultPoolLimit` and the
-`poolLimitGrowthRateBps` history starts over.
+The reopen refuses unless the scheduler holds no configs, the genesis pool is deployed and past
+DEPOSIT, and the daily config rebuilt from `INITIAL_ORIGINATION_POOL_0_*` has the recorded id.
+The pool may be deregistered (the miss path); the reopen logs its registration and leaves it
+unchanged. After the reopen, verify expects `configLength() == 1` with the daily config and the
+pool past DEPOSIT. Verify reports the pool as registered or deregistered instead of requiring
+registration; with `configLength() == 0` and the pool deregistered it verifies the
+post-deregistration state in any phase. The reopened daily config has the same id as before,
+but `removeConfig` deleted its deployment record, so the first daily pool after reopening is
+sized at `defaultPoolLimit` and the `poolLimitGrowthRateBps` history starts over.
 
 ### Record after broadcast
 

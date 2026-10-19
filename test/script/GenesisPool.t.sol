@@ -40,6 +40,9 @@ contract RolloverStyleDepositor {
 contract GenesisPoolTest is DeployAllTest {
   using OPoolConfigIdLibrary for OriginationPoolConfig;
 
+  string internal constant RELAUNCH_REVERT =
+    "genesis already launched: GENESIS_POOL_ADDRESS is a deployed pool; see GENESIS_FORCE_RELAUNCH";
+
   GenesisPoolLaunch public launch;
   IOriginationPoolScheduler public scheduler;
   uint256 public epochStart;
@@ -185,6 +188,22 @@ contract GenesisPoolTest is DeployAllTest {
     pool = address(launch.genesisPool());
     vm.warp(epochStart + 21 days + 5 minutes);
     _newReopen(pool, _dailyIdRaw()).run();
+  }
+
+  /// @dev The miss path: launch, then deregister the pool five minutes past the first boundary at or after its close.
+  function _launchAndDeregister() internal returns (address pool) {
+    launch.run();
+    pool = address(launch.genesisPool());
+    uint256 closeTs = IOriginationPool(pool).deployPhaseTimestamp();
+    uint256 boundary = closeTs - ((closeTs - Constants.EPOCH_OFFSET) % Constants.EPOCH_DURATION);
+    if (boundary < closeTs) {
+      boundary += Constants.EPOCH_DURATION;
+    }
+    epochStart = boundary;
+    vm.warp(epochStart + 5 minutes);
+    vm.prank(admin1);
+    scheduler.updateRegistration(pool, false);
+    assertFalse(scheduler.isRegistered(pool), "setup: genesis pool still registered");
   }
 
   function _fundUsdx(address account, uint256 usdAmount) internal returns (uint256 usdxAmount) {
@@ -409,8 +428,54 @@ contract GenesisPoolTest is DeployAllTest {
     vm.warp(epochStart + 21 days + 10 minutes);
     GenesisPoolLaunch again = _newLaunch();
     again.setGenesisPoolAddress(pool);
-    vm.expectRevert(bytes("genesis already launched: GENESIS_POOL_ADDRESS is a registered pool"));
+    vm.expectRevert(bytes(RELAUNCH_REVERT));
     again.run();
+  }
+
+  function test_launch_revertsAfterDeregistration() public {
+    address pool = _launchAndDeregister();
+    assertEq(scheduler.configLength(), 0, "setup: configs");
+    GenesisPoolLaunch again = _newLaunch();
+    again.setGenesisPoolAddress(pool);
+    vm.expectRevert(bytes(RELAUNCH_REVERT));
+    again.run();
+  }
+
+  function test_launch_revertsAfterDeregistrationAndReopen() public {
+    address pool = _launchAndDeregister();
+    _newReopen(pool, _dailyIdRaw()).run();
+    GenesisPoolLaunch again = _newLaunch();
+    again.setGenesisPoolAddress(pool);
+    vm.expectRevert(bytes(RELAUNCH_REVERT));
+    again.run();
+  }
+
+  function test_launch_forceRelaunchAfterDeregistration() public {
+    address pool = _launchAndDeregister();
+    address next = _schedulerPrediction();
+    assertTrue(next != pool, "setup: same address as the first genesis pool");
+
+    GenesisPoolLaunch again = _newLaunch();
+    again.setGenesisPoolAddress(pool);
+    again.setForceRelaunch(true);
+    again.run();
+    assertEq(uint8(again.launchState()), uint8(GenesisPoolLaunch.LaunchState.EMPTY), "launch state");
+    _assertLaunched(address(again.genesisPool()), next);
+    assertFalse(scheduler.isRegistered(pool), "first genesis pool re-registered");
+  }
+
+  function test_launch_resumesAfterFrontRunWithGenesisPoolAddressSet() public {
+    _partialLaunch(true);
+    OPoolConfigId genesisId = launch.genesisConfigId();
+    address predicted = scheduler.predictOriginationPool(genesisId);
+    vm.prank(makeAddr("roller"));
+    scheduler.deployOriginationPool(genesisId);
+
+    // This epoch's genesis pool is the one being resumed, not a relaunch
+    launch.setGenesisPoolAddress(predicted);
+    launch.run();
+    assertEq(uint8(launch.launchState()), uint8(GenesisPoolLaunch.LaunchState.GENESIS_DEPLOYED), "launch state");
+    _assertLaunched(address(launch.genesisPool()), predicted);
   }
 
   function test_launch_allowsUndeployedGenesisPoolAddress() public {
@@ -600,12 +665,26 @@ contract GenesisPoolTest is DeployAllTest {
     reopen.run();
   }
 
-  function test_reopen_revertsWithUnregisteredGenesisPoolAddress() public {
+  function test_reopen_revertsWhenGenesisPoolAddressIsNotAPool() public {
     launch.run();
     vm.warp(epochStart + 21 days + 5 minutes);
     GenesisPoolReopenDaily reopen = _newReopen(address(scheduler), _dailyIdRaw());
-    vm.expectRevert(bytes("GENESIS_POOL_ADDRESS is not registered on the scheduler"));
+    vm.expectRevert(bytes("GENESIS_POOL_ADDRESS is not an origination pool"));
     reopen.run();
+  }
+
+  function test_reopen_afterDeregistration() public {
+    address pool = _launchAndDeregister();
+    _newReopen(pool, _dailyIdRaw()).run();
+    assertEq(scheduler.configLength(), 1, "configLength");
+    assertEq(
+      OPoolConfigId.unwrap(scheduler.configIdAt(0)), OPoolConfigId.unwrap(launch.dailyConfigId()), "daily config id"
+    );
+    assertFalse(scheduler.isRegistered(pool), "genesis pool re-registered");
+
+    (bool registered, string memory state) = _newVerify(pool).run();
+    assertFalse(registered, "verify registered");
+    assertEq(state, "after reopen", "verify state");
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -614,12 +693,33 @@ contract GenesisPoolTest is DeployAllTest {
 
   function test_verify_afterLaunch() public {
     launch.run();
-    _newVerify(address(launch.genesisPool())).run();
+    (bool registered, string memory state) = _newVerify(address(launch.genesisPool())).run();
+    assertTrue(registered, "verify registered");
+    assertEq(state, "after launch", "verify state");
+  }
+
+  function test_verify_reportsDeregistered() public {
+    address pool = _launchAndDeregister();
+    (bool registered, string memory state) = _newVerify(pool).run();
+    assertFalse(registered, "verify registered");
+    assertEq(state, "after deregistration", "verify state");
+  }
+
+  function test_verify_reportsDeregisteredDuringDeposit() public {
+    launch.run();
+    address pool = address(launch.genesisPool());
+    vm.prank(admin1);
+    scheduler.updateRegistration(pool, false);
+    (bool registered, string memory state) = _newVerify(pool).run();
+    assertFalse(registered, "verify registered");
+    assertEq(state, "after deregistration", "verify state");
   }
 
   function test_verify_afterReopen() public {
     address pool = _launchAndReopen();
-    _newVerify(pool).run();
+    (bool registered, string memory state) = _newVerify(pool).run();
+    assertTrue(registered, "verify registered");
+    assertEq(state, "after reopen", "verify state");
   }
 
   function test_verify_revertsBeforeReopenWhenDepositOver() public {

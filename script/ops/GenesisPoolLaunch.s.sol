@@ -27,8 +27,10 @@ import {Roles} from "../../src/libraries/Roles.sol";
  *      Phase timestamps anchor to the start of the current epoch (12:00 UTC), not to the broadcast time,
  *      so every second past the boundary shortens the deposit phase. A run that deploys refuses when more
  *      than GENESIS_MAX_EPOCH_ELAPSED seconds (default 1 hour, never above 1 hour when broadcasting)
- *      have passed since the boundary. When GENESIS_POOL_ADDRESS is a registered pool the run refuses:
- *      the genesis pool was already launched.
+ *      have passed since the boundary. When GENESIS_POOL_ADDRESS has code and is not this epoch's genesis
+ *      pool, the run refuses whether or not that pool is still registered: a genesis pool was already
+ *      launched, and deregistering it (the miss path) must not reopen the launch. GENESIS_FORCE_RELAUNCH=true
+ *      bypasses that guard and deploys a second genesis pool.
  *      Removing the genesis config leaves the pool registered, so the GeneralManager and RolloverVault
  *      keep accepting it. The checks after the broadcast run against the local simulation only;
  *      GenesisPoolVerify checks the mined chain.
@@ -49,6 +51,7 @@ contract GenesisPoolLaunch is GenesisPoolBase {
   uint256 public constant DEFAULT_MAX_EPOCH_ELAPSED = 1 hours;
 
   uint256 public maxEpochElapsed;
+  bool public forceRelaunch;
   IOriginationPool public genesisPool;
   address public predictedPool;
   LaunchState public launchState;
@@ -56,6 +59,12 @@ contract GenesisPoolLaunch is GenesisPoolBase {
   function setUp() public virtual override {
     super.setUp();
     maxEpochElapsed = _envUintOr("GENESIS_MAX_EPOCH_ELAPSED", DEFAULT_MAX_EPOCH_ELAPSED);
+    forceRelaunch = vm.envOr("GENESIS_FORCE_RELAUNCH", false);
+  }
+
+  /// @notice Overrides GENESIS_FORCE_RELAUNCH after setUp.
+  function setForceRelaunch(bool force) external {
+    forceRelaunch = force;
   }
 
   /// @notice Overrides GENESIS_MAX_EPOCH_ELAPSED after setUp.
@@ -87,11 +96,11 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     }
     _requireAdmin();
     require(OPoolConfigId.unwrap(dailyId) != OPoolConfigId.unwrap(genesisId), "genesis config equals daily config");
-    require(!_genesisPoolLaunched(), "genesis already launched: GENESIS_POOL_ADDRESS is a registered pool");
 
     uint256 epoch = scheduler.currentEpoch();
     uint256 epochStart = currentEpochStart();
     predictedPool = _predictGenesisPool(genesis, genesisId);
+    _checkNotRelaunch();
     launchState = _classify(dailyId, genesisId, epoch);
     uint256 elapsed = block.timestamp - epochStart;
     if (launchState == LaunchState.GENESIS && elapsed > maxEpochElapsed) {
@@ -168,6 +177,23 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     scheduler.addConfig(genesis);
     pool = scheduler.predictOriginationPool(genesisId);
     require(vm.revertToStateAndDelete(snapshot), "snapshot revert failed");
+  }
+
+  /// @dev This epoch's genesis pool is the one being resumed; any other deployed GENESIS_POOL_ADDRESS is a relaunch.
+  function _checkNotRelaunch() internal view {
+    bool relaunch = _genesisPoolDeployed() && genesisPoolAddress != predictedPool;
+    if (!forceRelaunch) {
+      require(
+        !relaunch, "genesis already launched: GENESIS_POOL_ADDRESS is a deployed pool; see GENESIS_FORCE_RELAUNCH"
+      );
+      return;
+    }
+    console.log("WARNING: GENESIS_FORCE_RELAUNCH=true: the already-launched guard is bypassed");
+    if (relaunch) {
+      console.log("WARNING: a genesis pool is already deployed at", genesisPoolAddress);
+      console.log("WARNING:   it is", _registrationName(scheduler.isRegistered(genesisPoolAddress)));
+      console.log("WARNING: this run launches a second genesis pool at", predictedPool);
+    }
   }
 
   function _classify(OPoolConfigId dailyId, OPoolConfigId genesisId, uint256 epoch)
