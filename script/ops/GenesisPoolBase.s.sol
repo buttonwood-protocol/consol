@@ -26,6 +26,8 @@ import {Roles} from "../../src/libraries/Roles.sol";
 abstract contract GenesisPoolBase is Script {
   using OPoolConfigIdLibrary for OriginationPoolConfig;
 
+  uint256 public constant DEFAULT_DEPOSIT_PHASE_DURATION = 7 days;
+  uint256 public constant DEFAULT_DEPLOY_PHASE_DURATION = 7 days;
   uint256 public constant MIN_DEPOSIT_PHASE_DURATION = 7 days;
   uint256 public constant MAX_DEPOSIT_PHASE_DURATION = 35 days;
   uint256 public constant MIN_DEPLOY_PHASE_DURATION = 1 days;
@@ -81,8 +83,12 @@ abstract contract GenesisPoolBase is Script {
       symbolPrefix: vm.envOr("GENESIS_ORIGINATION_POOL_SYMBOL_PREFIX", string("GEN-OP")),
       consol: consol,
       usdx: usdx,
-      depositPhaseDuration: SafeCast.toUint32(_envUintOr("GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION", 21 days)),
-      deployPhaseDuration: SafeCast.toUint32(_envUintOr("GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION", 14 days)),
+      depositPhaseDuration: SafeCast.toUint32(
+        _envUintOr("GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION", DEFAULT_DEPOSIT_PHASE_DURATION)
+      ),
+      deployPhaseDuration: SafeCast.toUint32(
+        _envUintOr("GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION", DEFAULT_DEPLOY_PHASE_DURATION)
+      ),
       defaultPoolLimit: _envUintOr("GENESIS_ORIGINATION_POOL_DEFAULT_POOL_LIMIT", 1_000_000_000e18),
       poolLimitGrowthRateBps: SafeCast.toUint16(_envUintOr("GENESIS_ORIGINATION_POOL_POOL_LIMIT_GROWTH_RATE_BPS", 0)),
       poolMultiplierBps: SafeCast.toUint16(_envUintOr("GENESIS_ORIGINATION_POOL_POOL_MULTIPLIER_BPS", 0))

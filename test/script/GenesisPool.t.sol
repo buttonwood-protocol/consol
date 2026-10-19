@@ -143,8 +143,8 @@ contract GenesisPoolTest is DeployAllTest {
         epoch,
         g.consol,
         g.usdx,
-        epochStart + 21 days,
-        epochStart + 35 days,
+        epochStart + 7 days,
+        epochStart + 14 days,
         uint256(1_000_000_000e18),
         uint16(0)
       )
@@ -176,14 +176,14 @@ contract GenesisPoolTest is DeployAllTest {
     assertTrue(scheduler.isRegistered(pool), "genesis pool not registered");
     assertEq(uint8(IOriginationPool(pool).currentPhase()), uint8(OriginationPoolPhase.DEPOSIT), "phase");
     assertEq(scheduler.configLength(), 0, "configs left on the scheduler");
-    assertEq(IOriginationPool(pool).deployPhaseTimestamp(), epochStart + 21 days, "deployPhaseTimestamp");
-    assertEq(IOriginationPool(pool).redemptionPhaseTimestamp(), epochStart + 35 days, "redemptionPhaseTimestamp");
+    assertEq(IOriginationPool(pool).deployPhaseTimestamp(), epochStart + 7 days, "deployPhaseTimestamp");
+    assertEq(IOriginationPool(pool).redemptionPhaseTimestamp(), epochStart + 14 days, "redemptionPhaseTimestamp");
   }
 
   function _launchAndReopen() internal returns (address pool) {
     launch.run();
     pool = address(launch.genesisPool());
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     _newReopen(pool, _dailyIdRaw()).run();
   }
 
@@ -222,8 +222,8 @@ contract GenesisPoolTest is DeployAllTest {
     assertEq(pool.depositPhaseTimestamp(), epochStart + 5 minutes, "depositPhaseTimestamp");
     assertEq(pool.poolLimit(), 1_000_000_000e18, "poolLimit");
     assertEq(pool.poolMultiplierBps(), 0, "poolMultiplierBps");
-    assertEq(genesis.depositPhaseDuration, 1_814_400, "genesis depositPhaseDuration");
-    assertEq(genesis.deployPhaseDuration, 1_209_600, "genesis deployPhaseDuration");
+    assertEq(genesis.depositPhaseDuration, 604_800, "genesis depositPhaseDuration");
+    assertEq(genesis.deployPhaseDuration, 604_800, "genesis deployPhaseDuration");
     assertEq(genesis.poolLimitGrowthRateBps, 0, "genesis poolLimitGrowthRateBps");
     assertEq(genesis.namePrefix, "Genesis Origination Pool", "genesis namePrefix");
     assertEq(genesis.symbolPrefix, "GEN-OP", "genesis symbolPrefix");
@@ -405,8 +405,8 @@ contract GenesisPoolTest is DeployAllTest {
 
   function test_launch_revertsAfterReopenWhenAlreadyLaunched() public {
     address pool = _launchAndReopen();
-    // Day 21 is an epoch boundary: without the guard this would pass every other precondition
-    vm.warp(epochStart + 21 days + 10 minutes);
+    // Day 7 is an epoch boundary: without the guard this would pass every other precondition
+    vm.warp(epochStart + 7 days + 10 minutes);
     GenesisPoolLaunch again = _newLaunch();
     again.setGenesisPoolAddress(pool);
     vm.expectRevert(bytes("genesis already launched: GENESIS_POOL_ADDRESS is a registered pool"));
@@ -463,14 +463,14 @@ contract GenesisPoolTest is DeployAllTest {
     assertGt(amount, Constants.MINIMUM_ORIGINATION_DEPOSIT, "funding");
 
     // Late in the deposit phase, after the config is long gone
-    vm.warp(epochStart + 21 days - 1);
+    vm.warp(epochStart + 7 days - 1);
     depositor.depositOriginationPool(scheduler, IERC20(address(deployAll.usdx())), pool, amount);
     assertEq(IERC20(pool).balanceOf(address(depositor)), amount, "receipt tokens");
     assertEq(IERC20(address(deployAll.usdx())).balanceOf(pool), amount, "pool USDX balance");
 
-    vm.warp(epochStart + 21 days);
+    vm.warp(epochStart + 7 days);
     assertEq(
-      uint8(IOriginationPool(pool).currentPhase()), uint8(OriginationPoolPhase.DEPLOY), "pool not in DEPLOY at day 21"
+      uint8(IOriginationPool(pool).currentPhase()), uint8(OriginationPoolPhase.DEPLOY), "pool not in DEPLOY at day 7"
     );
     assertTrue(scheduler.isRegistered(pool), "genesis pool deregistered");
   }
@@ -478,6 +478,26 @@ contract GenesisPoolTest is DeployAllTest {
   // ---------------------------------------------------------------------------------------------
   // Genesis config bounds
   // ---------------------------------------------------------------------------------------------
+
+  function test_genesisConfig_defaultPhaseDurations() public view {
+    assertEq(launch.DEFAULT_DEPOSIT_PHASE_DURATION(), 7 days, "default deposit phase");
+    assertEq(launch.DEFAULT_DEPLOY_PHASE_DURATION(), 7 days, "default deploy phase");
+    OriginationPoolConfig memory c = launch.genesisConfig();
+    assertEq(c.depositPhaseDuration, 7 days, "genesis deposit phase");
+    assertEq(c.deployPhaseDuration, 7 days, "genesis deploy phase");
+  }
+
+  function test_launch_phaseTimestampsFollowDefaults() public {
+    launch.run();
+    IOriginationPool pool = launch.genesisPool();
+    assertEq(pool.deployPhaseTimestamp(), epochStart + 7 days, "deposit phase closes at day 7");
+    assertEq(pool.redemptionPhaseTimestamp(), epochStart + 14 days, "redemption opens at day 14");
+
+    vm.warp(epochStart + 14 days - 1);
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.DEPLOY), "pool not in DEPLOY before day 14");
+    vm.warp(epochStart + 14 days);
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.REDEMPTION), "pool not in REDEMPTION at day 14");
+  }
 
   function _boundsRevert(OriginationPoolConfig memory config, string memory reason) internal {
     vm.expectRevert(bytes(reason));
@@ -557,7 +577,7 @@ contract GenesisPoolTest is DeployAllTest {
   function test_reopen_revertsDuringDepositPhase() public {
     launch.run();
     address pool = address(launch.genesisPool());
-    vm.warp(epochStart + 21 days - 1);
+    vm.warp(epochStart + 7 days - 1);
     GenesisPoolReopenDaily reopen = _newReopen(pool, _dailyIdRaw());
     vm.expectRevert(bytes("genesis pool is still in DEPOSIT"));
     reopen.run();
@@ -566,7 +586,7 @@ contract GenesisPoolTest is DeployAllTest {
   function test_reopen_revertsWithWrongExpectedId() public {
     launch.run();
     address pool = address(launch.genesisPool());
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     GenesisPoolReopenDaily reopen = _newReopen(pool, OPoolConfigId.unwrap(launch.genesisConfigId()));
     vm.expectRevert(bytes("daily config id does not match GENESIS_EXPECTED_DAILY_CONFIG_ID"));
     reopen.run();
@@ -575,7 +595,7 @@ contract GenesisPoolTest is DeployAllTest {
   function test_reopen_revertsWithoutExpectedId() public {
     launch.run();
     address pool = address(launch.genesisPool());
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     GenesisPoolReopenDaily reopen = _newReopen(pool, bytes32(0));
     vm.expectRevert(bytes("GENESIS_EXPECTED_DAILY_CONFIG_ID is not set"));
     reopen.run();
@@ -584,7 +604,7 @@ contract GenesisPoolTest is DeployAllTest {
   function test_reopen_revertsWhenConfigsPresent() public {
     launch.run();
     address pool = address(launch.genesisPool());
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     vm.prank(admin1);
     scheduler.addConfig(_otherConfig);
     GenesisPoolReopenDaily reopen = _newReopen(pool, _dailyIdRaw());
@@ -594,7 +614,7 @@ contract GenesisPoolTest is DeployAllTest {
 
   function test_reopen_revertsWithoutGenesisPoolAddress() public {
     launch.run();
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     GenesisPoolReopenDaily reopen = _newReopen(address(0), _dailyIdRaw());
     vm.expectRevert(bytes("GENESIS_POOL_ADDRESS is not set"));
     reopen.run();
@@ -602,7 +622,7 @@ contract GenesisPoolTest is DeployAllTest {
 
   function test_reopen_revertsWithUnregisteredGenesisPoolAddress() public {
     launch.run();
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     GenesisPoolReopenDaily reopen = _newReopen(address(scheduler), _dailyIdRaw());
     vm.expectRevert(bytes("GENESIS_POOL_ADDRESS is not registered on the scheduler"));
     reopen.run();
@@ -625,7 +645,7 @@ contract GenesisPoolTest is DeployAllTest {
   function test_verify_revertsBeforeReopenWhenDepositOver() public {
     launch.run();
     address pool = address(launch.genesisPool());
-    vm.warp(epochStart + 21 days + 5 minutes);
+    vm.warp(epochStart + 7 days + 5 minutes);
     GenesisPoolVerify verify = _newVerify(pool);
     vm.expectRevert(bytes("after launch: genesis pool is not in DEPOSIT"));
     verify.run();
