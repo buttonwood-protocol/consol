@@ -11,7 +11,7 @@ the signer comes from the wallet flags on the command line.
 | --- | --- | --- |
 | `GenesisPoolLaunch.s.sol` | Launch day, just after 12:00 UTC | `removeConfig(daily)` → `addConfig(genesis)` → `deployOriginationPool(genesisId)` → `removeConfig(genesis)`, or only the steps still missing |
 | `GenesisPoolVerify.s.sol` | Right after each launch or reopen broadcast | none (read-only) |
-| `GenesisPoolReopenDaily.s.sol` | Day 7, once the genesis pool has left DEPOSIT | `addConfig(daily)` |
+| `GenesisPoolReopenDaily.s.sol` | Once the genesis pool has left DEPOSIT (day 7 with the defaults) | `addConfig(daily)` |
 
 Inputs:
 
@@ -20,8 +20,10 @@ Inputs:
 - `GENESIS_ORIGINATION_POOL_{NAME_PREFIX,SYMBOL_PREFIX,DEPOSIT_PHASE_DURATION,DEPLOY_PHASE_DURATION,DEFAULT_POOL_LIMIT,POOL_LIMIT_GROWTH_RATE_BPS,POOL_MULTIPLIER_BPS}`:
   optional; default to `Genesis Origination Pool`, `GEN-OP`, 7 days, 7 days, `1_000_000_000e18`, 0, 0.
   A set value that does not parse reverts (no silent fallback to the default). Bounds: deposit
-  phase 7–35 days, deploy phase 1–30 days, pool limit `1_000_000e18`–`1e30`, both bps at most
-  `10_000`; a value outside them reverts with the variable's name.
+  phase 7–35 days, deploy phase 1–30 days (both floors are 1 hour on Robinhood Testnet, see
+  below), pool limit `1_000_000e18`–`1e30`, both bps at most `10_000`; a value outside them
+  reverts with the variable's name. Set the same values for the launch, verify and reopen runs:
+  verify locates the launch epoch from `depositPhaseDuration`.
 - `GENESIS_MAX_EPOCH_ELAPSED`: optional, default `3600`. A launch run that still has to deploy
   reverts when more seconds than this have passed since the last 12:00 UTC boundary. With
   `--broadcast`, a value above `3600` is refused; it can only widen simulations.
@@ -42,6 +44,29 @@ With the defaults, counted from the launch epoch's 12:00 UTC boundary: deposits 
 (`redemptionPhaseTimestamp = deployPhaseTimestamp + deployPhaseDuration`) depositors can
 `redeem` their receipt tokens for their share of the USDX left undeployed and of the Consol the
 pool received.
+
+### Rehearsal durations on Robinhood Testnet
+
+On chain id 46630 only, both phase floors drop to 1 hour so a full cycle fits in three sessions
+instead of two weeks. The scripts decide this from `block.chainid`, not from an environment
+variable, so every other chain keeps the 7-day and 1-day floors; the defaults stay 7 days and
+7 days everywhere. Set the short values explicitly in the testnet `.env`, for example:
+
+```bash
+GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION=10800   # 3 hours: deposits close at 15:00 UTC on day 1
+GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION=118800   # 33 hours: redemption opens at 00:00 UTC on day 3
+```
+
+- Day 1, lending session: launch just after 12:00 UTC as on mainnet (the epoch-boundary and
+  one-hour rules are unchanged), verify, and deposit during the 2–3 hour deposit phase. Once
+  deposits close, run the reopen and verify again.
+- Day 2, borrowing session: the genesis pool is in its deploy phase all day, and the daily pools
+  are back on the scheduler.
+- Day 3: redemption opens; redeem the genesis receipt tokens and check the rollover into the
+  daily pools.
+
+A launch that still has to deploy refuses when the time since the boundary already covers the
+whole deposit phase, so keep the deposit phase well above the minutes the launch takes.
 
 ### What the launch does
 
@@ -192,7 +217,7 @@ cast send 0xF33359eeA22DB1Ba2943732C4933917025B6c92f \
 cast call 0xF33359eeA22DB1Ba2943732C4933917025B6c92f "configLength()(uint256)" --rpc-url robinhood
 ```
 
-### Reopen (day 7)
+### Reopen (day 7 with the defaults)
 
 At or after the pool's `deployPhaseTimestamp`, with `GENESIS_POOL_ADDRESS` and
 `GENESIS_EXPECTED_DAILY_CONFIG_ID` set:

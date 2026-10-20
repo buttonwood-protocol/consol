@@ -20,6 +20,8 @@ import {Roles} from "../../src/libraries/Roles.sol";
  *      The daily config is rebuilt from the INITIAL_ORIGINATION_POOL_0_* vars DeployAll added it with.
  *      The genesis config reads GENESIS_ORIGINATION_POOL_* and defaults to the launch parameters;
  *      a set but malformed or out-of-bounds override reverts instead of falling back to the default.
+ *      On Robinhood Testnet (chain id 46630) both phase floors are 1 hour, so a rehearsal runs in hours;
+ *      every other chain keeps the 7-day deposit and 1-day deploy floors. The defaults are the same everywhere.
  *      GENESIS_POOL_ADDRESS (optional) is the deployed genesis pool, recorded after launch.
  *      The signer is ADMIN_ADDRESS_0, which must hold DEFAULT_ADMIN_ROLE on the scheduler.
  */
@@ -32,6 +34,8 @@ abstract contract GenesisPoolBase is Script {
   uint256 public constant MAX_DEPOSIT_PHASE_DURATION = 35 days;
   uint256 public constant MIN_DEPLOY_PHASE_DURATION = 1 days;
   uint256 public constant MAX_DEPLOY_PHASE_DURATION = 30 days;
+  uint256 public constant REHEARSAL_CHAIN_ID = 46_630;
+  uint256 public constant REHEARSAL_MIN_PHASE_DURATION = 1 hours;
   uint256 public constant MIN_DEFAULT_POOL_LIMIT = 1_000_000e18;
   uint256 public constant MAX_DEFAULT_POOL_LIMIT = 1e30;
   uint256 public constant MAX_BPS = 10_000;
@@ -53,6 +57,15 @@ abstract contract GenesisPoolBase is Script {
   /// @notice Overrides GENESIS_POOL_ADDRESS after setUp.
   function setGenesisPoolAddress(address pool) external {
     genesisPoolAddress = pool;
+  }
+
+  /// @notice Overrides GENESIS_ORIGINATION_POOL_{DEPOSIT,DEPLOY}_PHASE_DURATION after setUp, within the same bounds.
+  function setGenesisPhaseDurations(uint32 depositPhaseDuration, uint32 deployPhaseDuration) external {
+    OriginationPoolConfig memory config = _genesisConfig;
+    config.depositPhaseDuration = depositPhaseDuration;
+    config.deployPhaseDuration = deployPhaseDuration;
+    validateGenesisConfig(config);
+    _genesisConfig = config;
   }
 
   function setUp() public virtual {
@@ -97,16 +110,20 @@ abstract contract GenesisPoolBase is Script {
   }
 
   /// @notice Reverts, naming the env var, when a genesis parameter is outside its sanity bounds.
-  function validateGenesisConfig(OriginationPoolConfig memory config) public pure {
+  function validateGenesisConfig(OriginationPoolConfig memory config) public view {
+    bool rehearsal = isRehearsalChain();
     require(
-      config.depositPhaseDuration >= MIN_DEPOSIT_PHASE_DURATION
+      config.depositPhaseDuration >= minDepositPhaseDuration()
         && config.depositPhaseDuration <= MAX_DEPOSIT_PHASE_DURATION,
-      "GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION out of bounds [7 days, 35 days]"
+      rehearsal
+        ? "GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION out of bounds [1 hour, 35 days]"
+        : "GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION out of bounds [7 days, 35 days]"
     );
     require(
-      config.deployPhaseDuration >= MIN_DEPLOY_PHASE_DURATION
-        && config.deployPhaseDuration <= MAX_DEPLOY_PHASE_DURATION,
-      "GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION out of bounds [1 day, 30 days]"
+      config.deployPhaseDuration >= minDeployPhaseDuration() && config.deployPhaseDuration <= MAX_DEPLOY_PHASE_DURATION,
+      rehearsal
+        ? "GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION out of bounds [1 hour, 30 days]"
+        : "GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION out of bounds [1 day, 30 days]"
     );
     require(
       config.defaultPoolLimit >= MIN_DEFAULT_POOL_LIMIT && config.defaultPoolLimit <= MAX_DEFAULT_POOL_LIMIT,
@@ -116,6 +133,21 @@ abstract contract GenesisPoolBase is Script {
       config.poolLimitGrowthRateBps <= MAX_BPS, "GENESIS_ORIGINATION_POOL_POOL_LIMIT_GROWTH_RATE_BPS above 10_000"
     );
     require(config.poolMultiplierBps <= MAX_BPS, "GENESIS_ORIGINATION_POOL_POOL_MULTIPLIER_BPS above 10_000");
+  }
+
+  /// @notice True on Robinhood Testnet, the only chain where the short rehearsal floors apply.
+  function isRehearsalChain() public view returns (bool) {
+    return block.chainid == REHEARSAL_CHAIN_ID;
+  }
+
+  /// @notice The deposit phase floor on this chain.
+  function minDepositPhaseDuration() public view returns (uint256) {
+    return isRehearsalChain() ? REHEARSAL_MIN_PHASE_DURATION : MIN_DEPOSIT_PHASE_DURATION;
+  }
+
+  /// @notice The deploy phase floor on this chain.
+  function minDeployPhaseDuration() public view returns (uint256) {
+    return isRehearsalChain() ? REHEARSAL_MIN_PHASE_DURATION : MIN_DEPLOY_PHASE_DURATION;
   }
 
   function dailyConfig() public view returns (OriginationPoolConfig memory) {
