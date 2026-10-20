@@ -161,17 +161,20 @@ abstract contract GenesisPoolBase is Script {
     );
   }
 
-  /// @dev True when GENESIS_POOL_ADDRESS points at a deployed pool registered on the scheduler.
-  function _genesisPoolLaunched() internal view returns (bool) {
-    return genesisPoolAddress != address(0) && genesisPoolAddress.code.length != 0
-      && scheduler.isRegistered(genesisPoolAddress);
+  /// @dev True when GENESIS_POOL_ADDRESS points at deployed code, whether or not it is still registered.
+  function _genesisPoolDeployed() internal view returns (bool) {
+    return genesisPoolAddress != address(0) && genesisPoolAddress.code.length != 0;
   }
 
+  /// @dev Requires a deployed GENESIS_POOL_ADDRESS; registration is reported by the callers, not required.
   function _requireGenesisPool() internal view returns (IOriginationPool) {
     require(genesisPoolAddress != address(0), "GENESIS_POOL_ADDRESS is not set");
     require(genesisPoolAddress.code.length != 0, "GENESIS_POOL_ADDRESS has no code");
-    require(scheduler.isRegistered(genesisPoolAddress), "GENESIS_POOL_ADDRESS is not registered on the scheduler");
     return IOriginationPool(genesisPoolAddress);
+  }
+
+  function _registrationName(bool registered) internal pure returns (string memory) {
+    return registered ? "registered" : "deregistered";
   }
 
   function _phaseName(OriginationPoolPhase phase) internal pure returns (string memory) {
