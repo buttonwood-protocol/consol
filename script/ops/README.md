@@ -11,14 +11,14 @@ the signer comes from the wallet flags on the command line.
 | --- | --- | --- |
 | `GenesisPoolLaunch.s.sol` | Launch day, just after 12:00 UTC | `removeConfig(daily)` → `addConfig(genesis)` → `deployOriginationPool(genesisId)` → `removeConfig(genesis)`, or only the steps still missing |
 | `GenesisPoolVerify.s.sol` | Right after each launch or reopen broadcast | none (read-only) |
-| `GenesisPoolReopenDaily.s.sol` | Day 21, once the genesis pool has left DEPOSIT | `addConfig(daily)` |
+| `GenesisPoolReopenDaily.s.sol` | Day 7, once the genesis pool has left DEPOSIT | `addConfig(daily)` |
 
 Inputs:
 
 - `ADMIN_ADDRESS_0`: the signer. Must hold `DEFAULT_ADMIN_ROLE` on the scheduler.
 - `INITIAL_ORIGINATION_POOL_0_*`: the daily config, exactly as DeployAll added it.
 - `GENESIS_ORIGINATION_POOL_{NAME_PREFIX,SYMBOL_PREFIX,DEPOSIT_PHASE_DURATION,DEPLOY_PHASE_DURATION,DEFAULT_POOL_LIMIT,POOL_LIMIT_GROWTH_RATE_BPS,POOL_MULTIPLIER_BPS}`:
-  optional; default to `Genesis Origination Pool`, `GEN-OP`, 21 days, 14 days, `1_000_000_000e18`, 0, 0.
+  optional; default to `Genesis Origination Pool`, `GEN-OP`, 7 days, 7 days, `1_000_000_000e18`, 0, 0.
   A set value that does not parse reverts (no silent fallback to the default). Bounds: deposit
   phase 7–35 days, deploy phase 1–30 days, pool limit `1_000_000e18`–`1e30`, both bps at most
   `10_000`; a value outside them reverts with the variable's name.
@@ -31,6 +31,12 @@ Inputs:
   registered pool ("genesis already launched"). The roller reads the same variable in genesis mode.
 - `GENESIS_EXPECTED_DAILY_CONFIG_ID`: required by the reopen. The launch logs it
   (`GENESIS_EXPECTED_DAILY_CONFIG_ID=0x…`); record it in the launch notes and in `.env`.
+
+With the defaults, counted from the launch epoch's 12:00 UTC boundary: deposits close at day 7
+(`deployPhaseTimestamp`), the deploy phase runs from day 7 to day 14, and from day 14
+(`redemptionPhaseTimestamp = deployPhaseTimestamp + deployPhaseDuration`) depositors can
+`redeem` their receipt tokens for their share of the USDX left undeployed and of the Consol the
+pool received.
 
 ### What the launch does
 
@@ -59,8 +65,8 @@ check against the chain.
 
 The scheduler anchors phase timestamps to the start of the current epoch (epochs start at 12:00 UTC),
 not to the block time: `deployPhaseTimestamp = epochStart + depositPhaseDuration`. Every minute
-between the boundary and the broadcast is a minute cut from the 21-day deposit phase, and a
-broadcast at 11:59 UTC gets a deposit phase of 20 days and 1 minute. Broadcasting just after the
+between the boundary and the broadcast is a minute cut from the 7-day deposit phase, and a
+broadcast at 11:59 UTC gets a deposit phase of 6 days and 1 minute. Broadcasting just after the
 boundary also keeps the simulation and the mined transactions in the same epoch, so the pool lands
 at the simulated address with the simulated timestamps. The script's output says whether the
 day's daily pool was already deployed this epoch; if it was, that pool runs its normal 1-day
@@ -101,7 +107,7 @@ forge script script/ops/GenesisPoolLaunch.s.sol --rpc-url $FORK
 forge script script/ops/GenesisPoolLaunch.s.sol --rpc-url $FORK --broadcast --unlocked --sender $ADMIN
 GENESIS_POOL_ADDRESS=<genesis pool> forge script script/ops/GenesisPoolVerify.s.sol --rpc-url $FORK
 
-# day 21 on the fork
+# day 7 on the fork
 DEPLOY_TS=$(cast call <genesis pool> "deployPhaseTimestamp()(uint256)" --rpc-url $FORK | awk '{print $1}')
 cast rpc evm_setNextBlockTimestamp $((DEPLOY_TS + 120)) --rpc-url $FORK && cast rpc evm_mine --rpc-url $FORK
 GENESIS_POOL_ADDRESS=<genesis pool> GENESIS_EXPECTED_DAILY_CONFIG_ID=<id from the launch log> \
@@ -176,12 +182,12 @@ then confirm `configLength() == 0`:
 ```bash
 cast send 0xF33359eeA22DB1Ba2943732C4933917025B6c92f \
   "removeConfig((string,string,address,address,uint32,uint32,uint256,uint16,uint16))" \
-  '("Genesis Origination Pool","GEN-OP",<consol>,<usdx>,1814400,1209600,1000000000000000000000000000,0,0)' \
+  '("Genesis Origination Pool","GEN-OP",<consol>,<usdx>,604800,604800,1000000000000000000000000000,0,0)' \
   --rpc-url robinhood <wallet flags>
 cast call 0xF33359eeA22DB1Ba2943732C4933917025B6c92f "configLength()(uint256)" --rpc-url robinhood
 ```
 
-### Reopen (day 21)
+### Reopen (day 7)
 
 At or after the pool's `deployPhaseTimestamp`, with `GENESIS_POOL_ADDRESS` and
 `GENESIS_EXPECTED_DAILY_CONFIG_ID` set:
