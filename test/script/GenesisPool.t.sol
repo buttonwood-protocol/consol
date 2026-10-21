@@ -617,6 +617,200 @@ contract GenesisPoolTest is DeployAllTest {
   }
 
   // ---------------------------------------------------------------------------------------------
+  // Rehearsal floors on Robinhood Testnet
+  // ---------------------------------------------------------------------------------------------
+
+  string internal constant DEPOSIT_BOUNDS_REVERT =
+    "GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION out of bounds [7 days, 35 days]";
+  string internal constant DEPLOY_BOUNDS_REVERT =
+    "GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION out of bounds [1 day, 30 days]";
+  string internal constant REHEARSAL_DEPOSIT_BOUNDS_REVERT =
+    "GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION out of bounds [1 hour, 35 days]";
+  string internal constant REHEARSAL_DEPLOY_BOUNDS_REVERT =
+    "GENESIS_ORIGINATION_POOL_DEPLOY_PHASE_DURATION out of bounds [1 hour, 30 days]";
+
+  uint32 internal constant REHEARSAL_DEPOSIT = 3 hours;
+  uint32 internal constant REHEARSAL_DEPLOY = 33 hours;
+
+  function _productionChainIds() internal pure returns (uint256[3] memory) {
+    return [uint256(4663), uint256(999), uint256(998)];
+  }
+
+  function test_rehearsalFloors_shortPhasesRefusedOutsideTestnet() public {
+    uint256[3] memory chainIds = _productionChainIds();
+    for (uint256 i = 0; i < chainIds.length; i++) {
+      vm.chainId(chainIds[i]);
+      GenesisPoolLaunch script = _newLaunch();
+      assertFalse(script.isRehearsalChain(), "rehearsal chain");
+      assertEq(script.minDepositPhaseDuration(), 7 days, "deposit floor");
+      assertEq(script.minDeployPhaseDuration(), 1 days, "deploy floor");
+
+      OriginationPoolConfig memory c = script.genesisConfig();
+      c.depositPhaseDuration = 1 hours;
+      vm.expectRevert(bytes(DEPOSIT_BOUNDS_REVERT));
+      script.validateGenesisConfig(c);
+      c.depositPhaseDuration = 7 days - 1;
+      vm.expectRevert(bytes(DEPOSIT_BOUNDS_REVERT));
+      script.validateGenesisConfig(c);
+
+      c = script.genesisConfig();
+      c.deployPhaseDuration = 1 hours;
+      vm.expectRevert(bytes(DEPLOY_BOUNDS_REVERT));
+      script.validateGenesisConfig(c);
+
+      vm.expectRevert(bytes(DEPOSIT_BOUNDS_REVERT));
+      script.setGenesisPhaseDurations(1 hours, 7 days);
+      vm.expectRevert(bytes(DEPLOY_BOUNDS_REVERT));
+      script.setGenesisPhaseDurations(7 days, 1 hours);
+
+      c = script.genesisConfig();
+      assertEq(c.depositPhaseDuration, 7 days, "deposit phase changed by a refused override");
+      assertEq(c.deployPhaseDuration, 7 days, "deploy phase changed by a refused override");
+    }
+  }
+
+  function test_rehearsalFloors_oneHourAcceptedOnTestnet() public {
+    vm.chainId(46_630);
+    GenesisPoolLaunch script = _newLaunch();
+    assertTrue(script.isRehearsalChain(), "rehearsal chain");
+    assertEq(script.minDepositPhaseDuration(), 1 hours, "deposit floor");
+    assertEq(script.minDeployPhaseDuration(), 1 hours, "deploy floor");
+
+    OriginationPoolConfig memory c = script.genesisConfig();
+    c.depositPhaseDuration = 1 hours;
+    c.deployPhaseDuration = 1 hours;
+    script.validateGenesisConfig(c);
+    c.depositPhaseDuration = 35 days;
+    c.deployPhaseDuration = 30 days;
+    script.validateGenesisConfig(c);
+
+    c = script.genesisConfig();
+    c.depositPhaseDuration = 1 hours - 1;
+    vm.expectRevert(bytes(REHEARSAL_DEPOSIT_BOUNDS_REVERT));
+    script.validateGenesisConfig(c);
+    c.depositPhaseDuration = 35 days + 1;
+    vm.expectRevert(bytes(REHEARSAL_DEPOSIT_BOUNDS_REVERT));
+    script.validateGenesisConfig(c);
+
+    c = script.genesisConfig();
+    c.deployPhaseDuration = 1 hours - 1;
+    vm.expectRevert(bytes(REHEARSAL_DEPLOY_BOUNDS_REVERT));
+    script.validateGenesisConfig(c);
+    c.deployPhaseDuration = 30 days + 1;
+    vm.expectRevert(bytes(REHEARSAL_DEPLOY_BOUNDS_REVERT));
+    script.validateGenesisConfig(c);
+
+    script.setGenesisPhaseDurations(1 hours, 1 hours);
+    c = script.genesisConfig();
+    assertEq(c.depositPhaseDuration, 1 hours, "deposit phase override");
+    assertEq(c.deployPhaseDuration, 1 hours, "deploy phase override");
+  }
+
+  function test_rehearsalFloors_defaultsUnchanged() public {
+    uint256[4] memory chainIds = [uint256(46_630), uint256(4663), uint256(999), uint256(998)];
+    for (uint256 i = 0; i < chainIds.length; i++) {
+      vm.chainId(chainIds[i]);
+      GenesisPoolLaunch script = _newLaunch();
+      assertEq(script.DEFAULT_DEPOSIT_PHASE_DURATION(), 7 days, "default deposit phase");
+      assertEq(script.DEFAULT_DEPLOY_PHASE_DURATION(), 7 days, "default deploy phase");
+      assertEq(script.MIN_DEPOSIT_PHASE_DURATION(), 7 days, "deposit floor constant");
+      assertEq(script.MIN_DEPLOY_PHASE_DURATION(), 1 days, "deploy floor constant");
+      OriginationPoolConfig memory c = script.genesisConfig();
+      assertEq(c.depositPhaseDuration, 7 days, "genesis deposit phase");
+      assertEq(c.deployPhaseDuration, 7 days, "genesis deploy phase");
+    }
+  }
+
+  /// @dev Day 1 lending session, day 2 borrowing session, day 3 redemption and rollover, all on testnet floors.
+  function test_rehearsal_launchVerifyReopenOverHours() public {
+    vm.chainId(46_630);
+    launch.setUp();
+    launch.setGenesisPhaseDurations(REHEARSAL_DEPOSIT, REHEARSAL_DEPLOY);
+    launch.run();
+    IOriginationPool pool = launch.genesisPool();
+    address poolAddress = address(pool);
+    _assertRehearsalTimestamps(pool);
+
+    GenesisPoolVerify verify = _newVerify(poolAddress);
+    verify.setGenesisPhaseDurations(REHEARSAL_DEPOSIT, REHEARSAL_DEPLOY);
+    (bool registered, string memory state) = verify.run();
+    assertTrue(registered, "verify registered");
+    assertEq(state, "after launch", "verify state after launch");
+
+    // Verify run without the rehearsal durations cannot place the pool on an epoch boundary
+    GenesisPoolVerify defaultsVerify = _newVerify(poolAddress);
+    vm.expectRevert(bytes("deployPhaseTimestamp - depositPhaseDuration is not a 12:00 UTC epoch boundary"));
+    defaultsVerify.run();
+
+    // Day 1: a deposit late in the lending session
+    address lender = makeAddr("lender");
+    uint256 amount = _fundUsdx(lender, 1_000e6);
+    vm.warp(epochStart + REHEARSAL_DEPOSIT - 1);
+    vm.startPrank(lender);
+    IERC20(address(deployAll.usdx())).approve(poolAddress, amount);
+    pool.deposit(amount);
+    vm.stopPrank();
+    assertEq(IERC20(poolAddress).balanceOf(lender), amount, "receipt tokens");
+
+    GenesisPoolReopenDaily reopen = _newReopen(poolAddress, _dailyIdRaw());
+    reopen.setGenesisPhaseDurations(REHEARSAL_DEPOSIT, REHEARSAL_DEPLOY);
+    vm.expectRevert(bytes("genesis pool is still in DEPOSIT"));
+    reopen.run();
+
+    // Deposits close three hours after the boundary; the daily config reopens the same day
+    vm.warp(epochStart + REHEARSAL_DEPOSIT);
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.DEPLOY), "not in DEPLOY after the deposit phase");
+    reopen.run();
+    (registered, state) = verify.run();
+    assertTrue(registered, "verify registered after reopen");
+    assertEq(state, "after reopen", "verify state after reopen");
+
+    // Day 2: the deploy phase is open for the borrowing session and the daily pools resume
+    vm.warp(epochStart + 1 days + 5 minutes);
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.DEPLOY), "not in DEPLOY on day 2");
+    address dailyPool = scheduler.deployOriginationPool(launch.dailyConfigId());
+    assertEq(uint8(IOriginationPool(dailyPool).currentPhase()), uint8(OriginationPoolPhase.DEPOSIT), "daily phase");
+
+    // Day 3: redemption opens at 00:00 UTC
+    vm.warp(epochStart + REHEARSAL_DEPOSIT + REHEARSAL_DEPLOY - 1);
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.DEPLOY), "left DEPLOY early");
+    vm.warp(epochStart + REHEARSAL_DEPOSIT + REHEARSAL_DEPLOY);
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.REDEMPTION), "not in REDEMPTION on day 3");
+    vm.prank(lender);
+    pool.redeem(amount);
+    assertEq(IERC20(address(deployAll.usdx())).balanceOf(lender), amount, "undeployed USDX not returned");
+    (registered, state) = verify.run();
+    assertEq(state, "after reopen", "verify state on day 3");
+  }
+
+  function test_rehearsal_launchRefusesWhenDepositPhaseWouldBeOver() public {
+    vm.chainId(46_630);
+    launch.setUp();
+    launch.setGenesisPhaseDurations(1 hours, 1 hours);
+    vm.warp(epochStart + 1 hours);
+    vm.expectRevert(bytes("the deposit phase would already be over at deployment"));
+    launch.run();
+
+    vm.warp(epochStart + 1 hours - 1);
+    launch.run();
+    IOriginationPool pool = launch.genesisPool();
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.DEPOSIT), "phase");
+    assertEq(pool.deployPhaseTimestamp(), epochStart + 1 hours, "deployPhaseTimestamp");
+    assertEq(pool.redemptionPhaseTimestamp(), epochStart + 2 hours, "redemptionPhaseTimestamp");
+  }
+
+  function _assertRehearsalTimestamps(IOriginationPool pool) internal view {
+    assertEq(uint8(pool.currentPhase()), uint8(OriginationPoolPhase.DEPOSIT), "phase");
+    assertEq(pool.depositPhaseTimestamp(), epochStart + 5 minutes, "depositPhaseTimestamp");
+    assertEq(pool.deployPhaseTimestamp(), epochStart + 3 hours, "deployPhaseTimestamp");
+    assertEq(pool.redemptionPhaseTimestamp(), epochStart + 36 hours, "redemptionPhaseTimestamp");
+    assertEq(
+      (pool.redemptionPhaseTimestamp() - Constants.EPOCH_OFFSET) % Constants.EPOCH_DURATION, 12 hours, "00:00 UTC"
+    );
+    assertEq(scheduler.configLength(), 0, "configs left on the scheduler");
+  }
+
+  // ---------------------------------------------------------------------------------------------
   // Reopen
   // ---------------------------------------------------------------------------------------------
 

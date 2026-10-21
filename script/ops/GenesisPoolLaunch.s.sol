@@ -27,7 +27,8 @@ import {Roles} from "../../src/libraries/Roles.sol";
  *      Phase timestamps anchor to the start of the current epoch (12:00 UTC), not to the broadcast time,
  *      so every second past the boundary shortens the deposit phase. A run that deploys refuses when more
  *      than GENESIS_MAX_EPOCH_ELAPSED seconds (default 1 hour, never above 1 hour when broadcasting)
- *      have passed since the boundary. When GENESIS_POOL_ADDRESS has code and is not this epoch's genesis
+ *      have passed since the boundary, or when that many seconds already cover the whole deposit phase.
+ *      When GENESIS_POOL_ADDRESS has code and is not this epoch's genesis
  *      pool, the run refuses whether or not that pool is still registered: a genesis pool was already
  *      launched, and deregistering it (the miss path) must not reopen the launch. GENESIS_FORCE_RELAUNCH=true
  *      bypasses that guard and deploys a second genesis pool.
@@ -126,6 +127,7 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     if (deploys) {
       require(!scheduler.paused(), "scheduler is paused");
       require(elapsed <= maxEpochElapsed, "too long after the 12:00 UTC epoch boundary; see GENESIS_MAX_EPOCH_ELAPSED");
+      require(elapsed < genesis.depositPhaseDuration, "the deposit phase would already be over at deployment");
     }
 
     if (launchState == LaunchState.DAILY) {
