@@ -73,11 +73,14 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     maxEpochElapsed = maxElapsed;
   }
 
-  /// @notice Reverts when an elapsed-time override above the default would apply to a broadcast.
-  function checkMaxEpochElapsed(uint256 maxElapsed, bool broadcasting) public pure {
+  /// @notice Reverts when an elapsed-time override above the broadcast cap would apply to a broadcast.
+  /// @dev The cap is 1 hour, except on the rehearsal chain, where a launch may broadcast at any point of the
+  ///      epoch; its phases still anchor to the epoch start, so a late launch shortens the deposit phase.
+  function checkMaxEpochElapsed(uint256 maxElapsed, bool broadcasting) public view {
+    uint256 cap = isRehearsalChain() ? 1 days : DEFAULT_MAX_EPOCH_ELAPSED;
     require(
-      !broadcasting || maxElapsed <= DEFAULT_MAX_EPOCH_ELAPSED,
-      "GENESIS_MAX_EPOCH_ELAPSED above 1 hour is refused when broadcasting"
+      !broadcasting || maxElapsed <= cap,
+      "GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap (1 hour; 1 day on the rehearsal chain)"
     );
   }
 
