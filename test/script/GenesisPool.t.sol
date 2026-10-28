@@ -384,8 +384,15 @@ contract GenesisPoolTest is DeployAllTest {
     launch.checkMaxEpochElapsed(1 days, false);
     launch.checkMaxEpochElapsed(1 hours, true);
     launch.checkMaxEpochElapsed(0, true);
-    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above 1 hour is refused when broadcasting"));
+    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap (1 hour; 1 day on the rehearsal chain)"));
     launch.checkMaxEpochElapsed(1 hours + 1, true);
+  }
+
+  function test_checkMaxEpochElapsed_rehearsalChainAllowsWholeEpoch() public {
+    vm.chainId(46_630);
+    launch.checkMaxEpochElapsed(1 days, true);
+    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap (1 hour; 1 day on the rehearsal chain)"));
+    launch.checkMaxEpochElapsed(1 days + 1, true);
   }
 
   function test_launch_revertsWithTwoConfigs() public {
