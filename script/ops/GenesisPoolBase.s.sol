@@ -28,7 +28,7 @@ import {Roles} from "../../src/libraries/Roles.sol";
 abstract contract GenesisPoolBase is Script {
   using OPoolConfigIdLibrary for OriginationPoolConfig;
 
-  uint256 public constant DEFAULT_DEPOSIT_PHASE_DURATION = 7 days;
+  uint256 public constant DEFAULT_DEPOSIT_PHASE_DURATION = 14 days;
   uint256 public constant DEFAULT_DEPLOY_PHASE_DURATION = 7 days;
   uint256 public constant MIN_DEPOSIT_PHASE_DURATION = 7 days;
   uint256 public constant MAX_DEPOSIT_PHASE_DURATION = 35 days;
