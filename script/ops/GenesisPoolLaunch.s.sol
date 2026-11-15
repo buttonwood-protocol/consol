@@ -26,8 +26,10 @@ import {Roles} from "../../src/libraries/Roles.sol";
  *        DONE             {}, genesis pool deployed this epoch -> nothing
  *      Phase timestamps anchor to the start of the current epoch (12:00 UTC), not to the broadcast time,
  *      so every second past the boundary shortens the deposit phase. A run that deploys refuses when more
- *      than GENESIS_MAX_EPOCH_ELAPSED seconds (default 1 hour, never above 1 hour when broadcasting)
- *      have passed since the boundary, or when that many seconds already cover the whole deposit phase.
+ *      than GENESIS_MAX_EPOCH_ELAPSED seconds (default 1 hour) have passed since the boundary, or when
+ *      that many seconds already cover the whole deposit phase. A broadcast refuses a value above 1 hour
+ *      unless GENESIS_ALLOW_LATE_LAUNCH=true, which accepts a launch at any point of the epoch and the
+ *      shorter deposit phase that comes with it.
  *      When GENESIS_POOL_ADDRESS has code and is not this epoch's genesis
  *      pool, the run refuses whether or not that pool is still registered: a genesis pool was already
  *      launched, and deregistering it (the miss path) must not reopen the launch. GENESIS_FORCE_RELAUNCH=true
@@ -53,6 +55,7 @@ contract GenesisPoolLaunch is GenesisPoolBase {
 
   uint256 public maxEpochElapsed;
   bool public forceRelaunch;
+  bool public allowLateLaunch;
   IOriginationPool public genesisPool;
   address public predictedPool;
   LaunchState public launchState;
@@ -61,11 +64,17 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     super.setUp();
     maxEpochElapsed = _envUintOr("GENESIS_MAX_EPOCH_ELAPSED", DEFAULT_MAX_EPOCH_ELAPSED);
     forceRelaunch = vm.envOr("GENESIS_FORCE_RELAUNCH", false);
+    allowLateLaunch = vm.envOr("GENESIS_ALLOW_LATE_LAUNCH", false);
   }
 
   /// @notice Overrides GENESIS_FORCE_RELAUNCH after setUp.
   function setForceRelaunch(bool force) external {
     forceRelaunch = force;
+  }
+
+  /// @notice Overrides GENESIS_ALLOW_LATE_LAUNCH after setUp.
+  function setAllowLateLaunch(bool allow) external {
+    allowLateLaunch = allow;
   }
 
   /// @notice Overrides GENESIS_MAX_EPOCH_ELAPSED after setUp.
@@ -74,13 +83,14 @@ contract GenesisPoolLaunch is GenesisPoolBase {
   }
 
   /// @notice Reverts when an elapsed-time override above the broadcast cap would apply to a broadcast.
-  /// @dev The cap is 1 hour, except on the rehearsal chain, where a launch may broadcast at any point of the
-  ///      epoch; its phases still anchor to the epoch start, so a late launch shortens the deposit phase.
+  /// @dev The cap is 1 hour. On the rehearsal chain, or with GENESIS_ALLOW_LATE_LAUNCH, a launch may broadcast
+  ///      at any point of the epoch; its phases still anchor to the epoch start, so a late launch shortens
+  ///      the deposit phase.
   function checkMaxEpochElapsed(uint256 maxElapsed, bool broadcasting) public view {
-    uint256 cap = isRehearsalChain() ? 1 days : DEFAULT_MAX_EPOCH_ELAPSED;
+    uint256 cap = isRehearsalChain() || allowLateLaunch ? 1 days : DEFAULT_MAX_EPOCH_ELAPSED;
     require(
       !broadcasting || maxElapsed <= cap,
-      "GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap (1 hour; 1 day on the rehearsal chain)"
+      "GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap; see GENESIS_ALLOW_LATE_LAUNCH"
     );
   }
 
@@ -97,6 +107,9 @@ contract GenesisPoolLaunch is GenesisPoolBase {
     checkMaxEpochElapsed(maxEpochElapsed, vm.isContext(VmSafe.ForgeContext.ScriptBroadcast));
     if (maxEpochElapsed != DEFAULT_MAX_EPOCH_ELAPSED) {
       console.log("WARNING: GENESIS_MAX_EPOCH_ELAPSED override active:", maxEpochElapsed);
+    }
+    if (allowLateLaunch) {
+      console.log("WARNING: GENESIS_ALLOW_LATE_LAUNCH active: a broadcast may deploy late in the epoch");
     }
     _requireAdmin();
     require(OPoolConfigId.unwrap(dailyId) != OPoolConfigId.unwrap(genesisId), "genesis config equals daily config");

@@ -26,7 +26,13 @@ Inputs:
   verify locates the launch epoch from `depositPhaseDuration`.
 - `GENESIS_MAX_EPOCH_ELAPSED`: optional, default `3600`. A launch run that still has to deploy
   reverts when more seconds than this have passed since the last 12:00 UTC boundary. With
-  `--broadcast`, a value above `3600` is refused; it can only widen simulations.
+  `--broadcast`, a value above `3600` is refused unless `GENESIS_ALLOW_LATE_LAUNCH=true`;
+  without that it can only widen simulations.
+- `GENESIS_ALLOW_LATE_LAUNCH`: optional, default `false`. `true` lets a broadcast use a
+  `GENESIS_MAX_EPOCH_ELAPSED` of up to `86400`, so the launch can go out at any point of the
+  epoch. The pool's phases still start at the last 12:00 UTC boundary: lengthen
+  `GENESIS_ORIGINATION_POOL_DEPOSIT_PHASE_DURATION` if the deposit phase should end on a
+  particular day. Both variables go on the command line, never in `.env`.
 - `GENESIS_POOL_ADDRESS`: the deployed genesis pool. Leave it unset (or set to the predicted,
   not yet deployed, address) for the launch. Set it as soon as the launch is verified: the reopen
   and verify scripts require it, and the launch refuses to run again once it points at a
@@ -160,7 +166,15 @@ launch window:
 GENESIS_MAX_EPOCH_ELAPSED=86400 forge script script/ops/GenesisPoolLaunch.s.sol --rpc-url robinhood
 ```
 
-Never put `GENESIS_MAX_EPOCH_ELAPSED` in `.env`; a broadcast refuses values above `3600` anyway.
+Never put `GENESIS_MAX_EPOCH_ELAPSED` in `.env`; a broadcast refuses values above `3600` unless
+`GENESIS_ALLOW_LATE_LAUNCH=true` is set with it.
+
+To launch late in the epoch on purpose (the deposit phase then started at the last 12:00 UTC):
+
+```bash
+GENESIS_ALLOW_LATE_LAUNCH=true GENESIS_MAX_EPOCH_ELAPSED=86400 \
+  forge script script/ops/GenesisPoolLaunch.s.sol --rpc-url robinhood --sender $ADMIN_ADDRESS_0 --broadcast <wallet flags>
+```
 
 ### Broadcast
 
