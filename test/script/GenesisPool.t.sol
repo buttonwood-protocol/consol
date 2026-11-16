@@ -384,15 +384,39 @@ contract GenesisPoolTest is DeployAllTest {
     launch.checkMaxEpochElapsed(1 days, false);
     launch.checkMaxEpochElapsed(1 hours, true);
     launch.checkMaxEpochElapsed(0, true);
-    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap (1 hour; 1 day on the rehearsal chain)"));
+    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap; see GENESIS_ALLOW_LATE_LAUNCH"));
     launch.checkMaxEpochElapsed(1 hours + 1, true);
   }
 
   function test_checkMaxEpochElapsed_rehearsalChainAllowsWholeEpoch() public {
     vm.chainId(46_630);
     launch.checkMaxEpochElapsed(1 days, true);
-    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap (1 hour; 1 day on the rehearsal chain)"));
+    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap; see GENESIS_ALLOW_LATE_LAUNCH"));
     launch.checkMaxEpochElapsed(1 days + 1, true);
+  }
+
+  function test_checkMaxEpochElapsed_lateLaunchAllowsWholeEpoch() public {
+    launch.setAllowLateLaunch(true);
+    launch.checkMaxEpochElapsed(1 days, true);
+    vm.expectRevert(bytes("GENESIS_MAX_EPOCH_ELAPSED above the broadcast cap; see GENESIS_ALLOW_LATE_LAUNCH"));
+    launch.checkMaxEpochElapsed(1 days + 1, true);
+  }
+
+  function test_launch_lateLaunchKeepsTheDefaultWindow() public {
+    launch.setAllowLateLaunch(true);
+    vm.warp(epochStart + 5 hours);
+    vm.expectRevert(bytes("too long after the 12:00 UTC epoch boundary; see GENESIS_MAX_EPOCH_ELAPSED"));
+    launch.run();
+  }
+
+  function test_launch_lateLaunchDeploysLateInEpoch() public {
+    launch.setAllowLateLaunch(true);
+    launch.setMaxEpochElapsed(1 days);
+    vm.warp(epochStart + 12 hours);
+    address predicted = _schedulerPrediction();
+    launch.run();
+    _assertLaunched(address(launch.genesisPool()), predicted);
+    assertEq(scheduler.configLength(), 0, "configs left on the scheduler");
   }
 
   function test_launch_revertsWithTwoConfigs() public {
