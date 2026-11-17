@@ -152,4 +152,11 @@ interface IGeneralManagerErrors {
    * @param purchaseAmount The purchase amount
    */
   error OriginationFeeExceedsPurchaseAmount(uint256 feeValue, uint256 purchaseAmount);
+
+  /**
+   * @notice Thrown when a fulfiller's callback delivers less collateral than the order requested
+   * @param collateralRequested The amount of collateral requested from the fulfiller
+   * @param collateralDelivered The amount of collateral the fulfiller delivered
+   */
+  error InsufficientCollateralDelivered(uint256 collateralRequested, uint256 collateralDelivered);
 }
