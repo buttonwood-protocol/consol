@@ -37,8 +37,6 @@ import {Roles} from "../../src/libraries/Roles.sol";
 contract PayFirstUpgrade is Script {
   /// @dev ERC-1967 implementation slot
   bytes32 internal constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
-  /// @dev EIP-170 runtime size limit
-  uint256 internal constant MAX_RUNTIME_SIZE = 24_576;
 
   /// @dev The GeneralManager configuration an upgrade must leave untouched
   struct Config {
@@ -73,6 +71,11 @@ contract PayFirstUpgrade is Script {
     _addressBookJson = json;
   }
 
+  /// @notice Pins the signer instead of reading ADMIN_ADDRESS_0.
+  function setAdmin(address admin_) external {
+    admin = admin_;
+  }
+
   /// @notice Pins the fulfillers instead of reading PAY_FIRST_FULFILLERS.
   function setFulfillers(address[] memory fulfillers_) external {
     _fulfillersPinned = true;
@@ -99,7 +102,9 @@ contract PayFirstUpgrade is Script {
       : vm.readFile(string.concat(vm.projectRoot(), "/addresses/addresses-", vm.toString(block.chainid), ".json"));
     generalManager = IGeneralManager(vm.parseJsonAddress(json, ".generalManagerAddress"));
     previousOrderPool = IOrderPool(vm.parseJsonAddress(json, ".orderPoolAddress"));
-    admin = vm.envAddress("ADMIN_ADDRESS_0");
+    if (admin == address(0)) {
+      admin = vm.envAddress("ADMIN_ADDRESS_0");
+    }
 
     if (!_fulfillersPinned && vm.envExists("PAY_FIRST_FULFILLERS")) {
       fulfillers = vm.envAddress("PAY_FIRST_FULFILLERS", ",");
@@ -164,7 +169,7 @@ contract PayFirstUpgrade is Script {
     generalManager.setPaused(true);
     vm.stopBroadcast();
     require(generalManager.paused(), "GeneralManager is not paused");
-    console.log("GeneralManager paused; continue with cutover()");
+    console.log("GeneralManager paused; continue with cutover() or rollback()");
   }
 
   /// @notice Upgrades the paused GeneralManager, points it at the new OrderPool, and unpauses.
@@ -252,6 +257,12 @@ contract PayFirstUpgrade is Script {
     console.log("Verified the pay-first cutover");
   }
 
+  /// @notice The EIP-170 runtime size limit the new implementation must fit.
+  /// @dev Overridable for builds that compile the GeneralManager with other optimizer settings than this repo.
+  function maxRuntimeSize() public pure virtual returns (uint256) {
+    return 24_576;
+  }
+
   function fulfillerCount() external view returns (uint256) {
     return fulfillers.length;
   }
@@ -284,7 +295,7 @@ contract PayFirstUpgrade is Script {
   function _checkDeployment() internal view {
     require(newImplementation.code.length != 0, "PAY_FIRST_GENERAL_MANAGER_IMPLEMENTATION has no code");
     require(
-      newImplementation.code.length <= MAX_RUNTIME_SIZE, "GeneralManager implementation exceeds the EIP-170 limit"
+      newImplementation.code.length <= maxRuntimeSize(), "GeneralManager implementation exceeds the EIP-170 limit"
     );
     require(
       IERC1822Proxiable(newImplementation).proxiableUUID() == IMPLEMENTATION_SLOT,
