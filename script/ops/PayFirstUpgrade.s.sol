@@ -346,6 +346,8 @@ contract PayFirstUpgrade is Script {
       "LoanManager lacks NFT_ROLE"
     );
     require(!generalManager.paused(), "GeneralManager is paused");
+    // Only the new implementation answers this
+    require(!generalManager.reentrancyGuardEntered(), "GeneralManager reports an entered reentrancy guard");
   }
 
   function _implementation() internal view returns (address) {
