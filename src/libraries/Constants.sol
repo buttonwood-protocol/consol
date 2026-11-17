@@ -64,4 +64,10 @@ library Constants {
    * @return MAX_ORIGINATION_FEE_RATE The maximum origination fee rate in basis points
    */
   uint16 public constant MAX_ORIGINATION_FEE_RATE = 500;
+
+  /**
+   * @notice The amount of USDX per origination pool withheld from a fulfiller's advance until the end of the origination
+   * @return FULFILLMENT_HOLDBACK_PER_POOL The amount of USDX withheld per origination pool
+   */
+  uint256 public constant FULFILLMENT_HOLDBACK_PER_POOL = 1000;
 }
