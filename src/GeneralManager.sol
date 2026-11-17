@@ -30,6 +30,7 @@ import {IOriginationPoolDeployCallback} from "./interfaces/IOriginationPoolDeplo
 import {ISubConsol} from "./interfaces/ISubConsol/ISubConsol.sol";
 import {Roles} from "./libraries/Roles.sol";
 import {Constants} from "./libraries/Constants.sol";
+import {OriginationLogic} from "./libraries/OriginationLogic.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -1081,9 +1082,28 @@ contract GeneralManager is
   /**
    * @inheritdoc IGeneralManager
    */
-  function originate(OriginationParameters calldata originationParameters)
-    external
-    payable
+  function originate(OriginationParameters calldata originationParameters) external payable {
+    _originate(originationParameters, "");
+  }
+
+  /**
+   * @inheritdoc IGeneralManager
+   */
+  function originateWithCallback(
+    OriginationParameters calldata originationParameters,
+    uint256 collateralRequested,
+    bytes calldata fulfillerData
+  ) external payable {
+    _originate(originationParameters, abi.encode(collateralRequested, fulfillerData));
+  }
+
+  /**
+   * @dev Originates a mortgage position by flash borrowing from the origination pools
+   * @param originationParameters The parameters for originating a mortgage creation or balance sheet expansion
+   * @param fulfillment Empty when the fulfiller delivered the collateral up front. Otherwise abi.encode(uint256 collateralRequested, bytes fulfillerData) for the fulfiller callback.
+   */
+  function _originate(OriginationParameters calldata originationParameters, bytes memory fulfillment)
+    internal
     onlyOrderPool
     whenNotPaused
     nonReentrant
@@ -1105,23 +1125,18 @@ contract GeneralManager is
     // Call deploy on the origination pool with the amount of USDX to deploy from it
     // After this call, the origination pool will flash lend `deployAmount` to the GeneralManager and call `originationPoolDeployCallback`
     IOriginationPool(originationParameters.originationPools[0])
-      .deploy(originationParameters.borrowAmounts[0], abi.encode(originationParameters, 0));
+      .deploy(originationParameters.borrowAmounts[0], abi.encode(originationParameters, 0, fulfillment));
 
     // Send the purchaseAmount of USDX to the fulfiller and any surplus (origination fee + rounding dust) to the fee recipient
-    // With no fee recipient set, the full balance goes to the fulfiller (should be equal to purchaseAmount)
-    address feeRecipient_ = $._feeRecipient;
-    uint256 usdxBalance = IERC20($._usdx).balanceOf(address(this));
-    if (feeRecipient_ == address(0)) {
-      IERC20($._usdx).safeTransfer(originationParameters.fulfiller, usdxBalance);
-    } else {
-      uint256 fulfillerAmount = Math.min(usdxBalance, originationParameters.purchaseAmount);
-      IERC20($._usdx).safeTransfer(originationParameters.fulfiller, fulfillerAmount);
-      uint256 surplus = usdxBalance - fulfillerAmount;
-      if (surplus > 0) {
-        IERC20($._usdx).safeTransfer(feeRecipient_, surplus);
-        emit OriginationFeeCollected(originationParameters.mortgageParams.tokenId, feeRecipient_, surplus);
-      }
-    }
+    // A fulfiller paid through the callback was already advanced everything but the holdback
+    OriginationLogic.settle(
+      $._usdx,
+      $._feeRecipient,
+      originationParameters.fulfiller,
+      originationParameters.purchaseAmount,
+      fulfillment.length == 0 ? 0 : originationParameters.originationPools.length,
+      originationParameters.mortgageParams.tokenId
+    );
   }
 
   /**
@@ -1138,15 +1153,22 @@ contract GeneralManager is
     GeneralManagerStorage storage $ = _getGeneralManagerStorage();
 
     // Decode the callback data
-    (OriginationParameters memory originationParameters, uint256 index) =
-      abi.decode(data, (OriginationParameters, uint256));
+    (OriginationParameters memory originationParameters, uint256 index, bytes memory fulfillment) =
+      abi.decode(data, (OriginationParameters, uint256, bytes));
 
     // If there are more origination pools in the array, call deploy on the next one to flash lend the remaining amount of USDX
     // If this is the last originationPool in the array, stop and continue with the origination
     if (index < originationParameters.originationPools.length - 1) {
       IOriginationPool(originationParameters.originationPools[index + 1])
-        .deploy(originationParameters.borrowAmounts[index + 1], abi.encode(originationParameters, index + 1));
+        .deploy(
+          originationParameters.borrowAmounts[index + 1], abi.encode(originationParameters, index + 1, fulfillment)
+        );
     } else {
+      // Advance the fulfiller its USDX and collect the collateral it owes through its callback
+      if (fulfillment.length != 0) {
+        OriginationLogic.advance($._usdx, data);
+      }
+
       // Send in the collateral to the LoanManager before creating/expanding the mortgage
       IERC20(originationParameters.mortgageParams.collateral)
         .safeTransfer(address(ILoanManager($._loanManager)), originationParameters.mortgageParams.collateralAmount);

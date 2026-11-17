@@ -269,6 +269,18 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
   function originate(OriginationParameters calldata originationParameters) external payable;
 
   /**
+   * @notice Originates a mortgage position whose fulfiller has not delivered its collateral yet. Advances the fulfiller its USDX, calls IOrderFulfillmentCallback#orderFulfillmentCallback on it, and reverts unless the callback delivers the requested collateral. Only callable by the OrderPool.
+   * @param originationParameters The parameters for originating a mortgage creation or balance sheet expansion
+   * @param collateralRequested The amount of collateral the fulfiller must deliver during its callback
+   * @param fulfillerData The data passed through to the fulfiller's callback
+   */
+  function originateWithCallback(
+    OriginationParameters calldata originationParameters,
+    uint256 collateralRequested,
+    bytes calldata fulfillerData
+  ) external payable;
+
+  /**
    * @notice Enqueues a mortgage position into a conversion queue
    * @param tokenId The tokenId of the mortgage position
    * @param conversionQueueList The list of conversion queues to use

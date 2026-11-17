@@ -99,4 +99,16 @@ interface IOrderPool is IOrderPoolEvents, IOrderPoolErrors {
    * @param hintPrevIdsList The list of hintPrevIds for each purchase order. Each hintPrevIds is a list of hint of the previous mortgage position in the respective conversion queue.
    */
   function processOrders(uint256[] memory indices, uint256[][] memory hintPrevIdsList) external;
+
+  /**
+   * @notice Processes the purchase orders at the given indices like processOrders, but without pulling the purchased collateral from the fulfiller up front. For each fulfilled order the GeneralManager advances the fulfiller its USDX, calls IOrderFulfillmentCallback#orderFulfillmentCallback on it, and reverts unless the callback delivers the purchased collateral. Only callable by the FULFILLMENT_ROLE.
+   * @param indices The indices of the purchase orders to process
+   * @param hintPrevIdsList The list of hintPrevIds for each purchase order. Each hintPrevIds is a list of hint of the previous mortgage position in the respective conversion queue.
+   * @param fulfillerDataList The data passed through to the fulfiller's callback for each purchase order
+   */
+  function processOrdersWithCallback(
+    uint256[] memory indices,
+    uint256[][] memory hintPrevIdsList,
+    bytes[] memory fulfillerDataList
+  ) external;
 }

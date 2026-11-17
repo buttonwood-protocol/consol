@@ -197,9 +197,14 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
    * @dev Processes an order at a given internal index
    * @param index The index of the order
    * @param hintPrevIds List of hints for identifying the previous mortgage position in the respective conversion queue.
+   * @param withCallback Whether the fulfiller delivers the purchased collateral through its callback instead of up front
+   * @param fulfillerData The data passed through to the fulfiller's callback. Unused unless withCallback is set.
    * @return collectedGasFee The amount of gas fee collected
    */
-  function _processOrder(uint256 index, uint256[] memory hintPrevIds) internal returns (uint256 collectedGasFee) {
+  function _processOrder(uint256 index, uint256[] memory hintPrevIds, bool withCallback, bytes memory fulfillerData)
+    internal
+    returns (uint256 collectedGasFee)
+  {
     // Fetch the order from the orders mapping
     PurchaseOrder memory order = _orders[index];
 
@@ -224,9 +229,9 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
       // Send the collected assets to the general manager
       _sendCollectedAssets(generalManager, order);
 
-      // Send the rest of the purchased collateral to the general manager
+      // Send the rest of the purchased collateral to the general manager, unless the fulfiller delivers it through its callback
       uint256 collateralRequested = order.mortgageParams.collateralAmount - order.orderAmounts.collateralCollected;
-      if (collateralRequested > 0) {
+      if (!withCallback && collateralRequested > 0) {
         IERC20(order.mortgageParams.collateral).safeTransferFrom(_msgSender(), generalManager, collateralRequested);
       }
 
@@ -235,25 +240,41 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
         revert HintPrevIdsListLengthMismatch(index, hintPrevIds.length, order.conversionQueues.length);
       }
 
-      // Originate the mortgage (fulfiller will receive back the purchaseAmount of USDX)
-      IGeneralManager(generalManager).originate{value: order.mortgageGasFee}(
-        OriginationParameters({
-          mortgageParams: order.mortgageParams,
-          fulfiller: _msgSender(),
-          originationPools: order.originationPools,
-          borrowAmounts: order.borrowAmounts,
-          conversionQueues: order.conversionQueues,
-          hintPrevIds: hintPrevIds,
-          expansion: order.expansion,
-          purchaseAmount: order.orderAmounts.purchaseAmount
-        })
-      );
+      // Originate the mortgage (fulfiller will receive the purchaseAmount of USDX)
+      OriginationParameters memory originationParameters = OriginationParameters({
+        mortgageParams: order.mortgageParams,
+        fulfiller: _msgSender(),
+        originationPools: order.originationPools,
+        borrowAmounts: order.borrowAmounts,
+        conversionQueues: order.conversionQueues,
+        hintPrevIds: hintPrevIds,
+        expansion: order.expansion,
+        purchaseAmount: order.orderAmounts.purchaseAmount
+      });
+      if (withCallback) {
+        IGeneralManager(generalManager).originateWithCallback{value: order.mortgageGasFee}(
+          originationParameters, collateralRequested, fulfillerData
+        );
+      } else {
+        IGeneralManager(generalManager).originate{value: order.mortgageGasFee}(originationParameters);
+      }
 
       // Emit the PurchaseOrderFilled event
       emit PurchaseOrderFilled(index);
     }
     // Record the amount of gas to reimburse
     collectedGasFee += order.orderPoolGasFee;
+  }
+
+  /**
+   * @dev Sends the collected gas fees to the _msgSender
+   * @param collectedGasFees The amount of gas fees to send
+   */
+  function _sendCollectedGasFees(uint256 collectedGasFees) internal {
+    (bool success,) = _msgSender().call{value: collectedGasFees}("");
+    if (!success) {
+      revert FailedToWithdrawNativeGas(collectedGasFees);
+    }
   }
 
   /**
@@ -267,13 +288,28 @@ contract OrderPool is Context, ERC165, AccessControl, IOrderPool, ReentrancyGuar
     // Start tracking total amount of gas to reimburse
     uint256 collectedGasFees;
     for (uint256 i = 0; i < indices.length; i++) {
-      collectedGasFees += _processOrder(indices[i], hintPrevIdsList[i]);
+      collectedGasFees += _processOrder(indices[i], hintPrevIdsList[i], false, "");
     }
 
     // Send the collected gas fees to the _msgSender
-    (bool success,) = _msgSender().call{value: collectedGasFees}("");
-    if (!success) {
-      revert FailedToWithdrawNativeGas(collectedGasFees);
+    _sendCollectedGasFees(collectedGasFees);
+  }
+
+  /**
+   * @inheritdoc IOrderPool
+   */
+  function processOrdersWithCallback(
+    uint256[] memory indices,
+    uint256[][] memory hintPrevIdsList,
+    bytes[] memory fulfillerDataList
+  ) external onlyRole(Roles.FULFILLMENT_ROLE) nonReentrant {
+    // Start tracking total amount of gas to reimburse
+    uint256 collectedGasFees;
+    for (uint256 i = 0; i < indices.length; i++) {
+      collectedGasFees += _processOrder(indices[i], hintPrevIdsList[i], true, fulfillerDataList[i]);
     }
+
+    // Send the collected gas fees to the _msgSender
+    _sendCollectedGasFees(collectedGasFees);
   }
 }
