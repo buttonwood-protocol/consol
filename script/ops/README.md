@@ -330,3 +330,107 @@ cast call 0xc127d8aBcbB08f7A5C0442AE5A24883027bd910C "maximumCap(address)(uint25
 
 Commit the `broadcast/SetBorrowCaps.s.sol/4663/` record of the mainnet run the same way as other
 mainnet runs.
+
+## Pay-first fulfillment upgrade
+
+`PayFirstUpgrade.s.sol` moves a live chain onto the fulfillment-callback origination path
+(`OrderPool.processOrdersWithCallback` → `GeneralManager.originateWithCallback`): a new GeneralManager
+implementation linked against the `OriginationLogic` library, and a new OrderPool, because the
+OrderPool is immutable. Everything is signed by `ADMIN_ADDRESS_0`, which must hold
+`DEFAULT_ADMIN_ROLE` and `PAUSE_ROLE` on the GeneralManager.
+
+| Entry point | Transactions | Effect on the live stack |
+| --- | --- | --- |
+| `run()` | deploy `OriginationLogic` (CREATE2), deploy the GeneralManager implementation, deploy the OrderPool, `setGasFee`, `setMaximumOrderDuration`, one `grantRole(FULFILLMENT_ROLE)` per fulfiller | none |
+| `pause()` | `GeneralManager.setPaused(true)` | order requests and originations revert |
+| `cutover()` | `upgradeToAndCall(newImplementation, "")` → `setOrderPool(newOrderPool)` → `setPaused(false)` | the GeneralManager runs the new implementation against the new OrderPool |
+| `rollback()` | `setOrderPool(previousOrderPool)` → (optional) `upgradeToAndCall(previousImplementation, "")` → `setPaused(false)` | back on the previous OrderPool |
+| `verify()` | none (read-only) | |
+
+Inputs:
+
+- `PAY_FIRST_FULFILLERS`: comma-separated addresses granted `FULFILLMENT_ROLE` on the new OrderPool.
+  Each must already hold it on the current one, so the new pool can only mirror the old one. On
+  4663 that is the UniswapFulfillmentVault and the admin.
+- `PAY_FIRST_GENERAL_MANAGER_IMPLEMENTATION`, `PAY_FIRST_ORDER_POOL`,
+  `PAY_FIRST_PREVIOUS_IMPLEMENTATION`: logged by `run()`. Put them in `.env` before `cutover()`;
+  `rollback()` and `verify()` read them too.
+- `PAY_FIRST_ROLLBACK_IMPLEMENTATION`: optional, default `false`. `true` makes `rollback()` also
+  restore the previous implementation. Pass it on the command line for that one run.
+
+The new OrderPool copies `nativeWrapper`, `gasFee` and `maximumOrderDuration` from the current
+one. The address book keeps naming the previous OrderPool until the cutover is verified; repoint
+`orderPoolAddress` in a follow-up change.
+
+### Why the pause
+
+`setOrderPool` moves `NFT_ROLE` from the old OrderPool to the new one. An order still sitting in
+the old pool can then neither be filled nor refunded: both paths go through the GeneralManager as
+the pool. `cutover()` and `rollback()` therefore refuse to run unless the GeneralManager is paused
+and the pool being left holds no open order. Pausing first, as its own mined transaction, is what
+makes that check hold: no order can be created between the check and `setOrderPool`. If an order
+is open, wait for it to be filled or to expire and be swept (`maximumOrderDuration` bounds the
+wait), then run the step again.
+
+The new implementation keeps `originate` unchanged, so it also works against the previous
+OrderPool. That is why `rollback()` only needs `setOrderPool`: restoring the previous
+implementation is optional.
+
+### Run
+
+```bash
+# 1. simulate, then broadcast the deployments (nothing live changes)
+PAY_FIRST_FULFILLERS=<vault>,<admin> forge script script/ops/PayFirstUpgrade.s.sol \
+  --rpc-url robinhood --sender <ADMIN_ADDRESS_0>
+PAY_FIRST_FULFILLERS=<vault>,<admin> forge script script/ops/PayFirstUpgrade.s.sol \
+  --rpc-url robinhood --sender <ADMIN_ADDRESS_0> --broadcast --slow <wallet flags>
+
+# 2. record PAY_FIRST_GENERAL_MANAGER_IMPLEMENTATION, PAY_FIRST_ORDER_POOL and
+#    PAY_FIRST_PREVIOUS_IMPLEMENTATION from the log in .env, then pause
+forge script script/ops/PayFirstUpgrade.s.sol --sig 'pause()' \
+  --rpc-url robinhood --sender <ADMIN_ADDRESS_0> --broadcast --slow <wallet flags>
+
+# 3. cut over (three transactions; the last one unpauses)
+PAY_FIRST_FULFILLERS=<vault>,<admin> forge script script/ops/PayFirstUpgrade.s.sol --sig 'cutover()' \
+  --rpc-url robinhood --sender <ADMIN_ADDRESS_0> --broadcast --slow <wallet flags>
+
+# 4. verify against the chain
+PAY_FIRST_FULFILLERS=<vault>,<admin> forge script script/ops/PayFirstUpgrade.s.sol --sig 'verify()' \
+  --rpc-url robinhood
+```
+
+Simulate every step without `--broadcast` first. If `cutover()` stops partway, the GeneralManager
+stays paused: read `orderPool()` and the ERC-1967 implementation slot to see which transactions
+mined, then send the missing ones by hand in the same order (`upgradeToAndCall`, `setOrderPool`,
+`setPaused(false)`). Never use `forge script --resume`; it replays the recorded transactions
+without the checks.
+
+### Rollback
+
+```bash
+forge script script/ops/PayFirstUpgrade.s.sol --sig 'pause()' \
+  --rpc-url robinhood --sender <ADMIN_ADDRESS_0> --broadcast --slow <wallet flags>
+forge script script/ops/PayFirstUpgrade.s.sol --sig 'rollback()' \
+  --rpc-url robinhood --sender <ADMIN_ADDRESS_0> --broadcast --slow <wallet flags>
+```
+
+Add `PAY_FIRST_ROLLBACK_IMPLEMENTATION=true` to the second command to restore the previous
+implementation as well. After a rollback `verify()` reverts by design.
+
+### Verify the sources
+
+The GeneralManager implementation is linked, so Sourcify needs the library address from the
+broadcast record (`libraries` in `broadcast/PayFirstUpgrade.s.sol/<chainId>/run-latest.json`):
+
+```bash
+forge verify-contract <OriginationLogic> src/libraries/OriginationLogic.sol:OriginationLogic \
+  --verifier sourcify --chain-id 4663
+forge verify-contract <implementation> src/GeneralManager.sol:GeneralManager \
+  --verifier sourcify --chain-id 4663 \
+  --libraries src/libraries/OriginationLogic.sol:OriginationLogic:<OriginationLogic>
+forge verify-contract <orderPool> src/OrderPool.sol:OrderPool --verifier sourcify --chain-id 4663 \
+  --constructor-args $(cast abi-encode "constructor(address,address,address)" <nativeWrapper> <generalManager> <admin>)
+```
+
+Commit the `broadcast/PayFirstUpgrade.s.sol/<chainId>/` record of a mainnet run the same way as
+other mainnet runs.
