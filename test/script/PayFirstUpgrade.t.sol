@@ -12,6 +12,13 @@ import {OrderAmounts} from "../../src/types/orders/OrderAmounts.sol";
 import {IAccessControl} from "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Roles} from "../../src/libraries/Roles.sol";
 
+/// @dev The coverage profile compiles without the optimizer, so no GeneralManager build fits EIP-170 there
+contract PayFirstUpgradeUnoptimized is PayFirstUpgrade {
+  function maxRuntimeSize() public pure override returns (uint256) {
+    return type(uint256).max;
+  }
+}
+
 contract PayFirstUpgradeTest is DeployAllTest {
   bytes32 internal constant IMPLEMENTATION_SLOT = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
 
@@ -58,9 +65,18 @@ contract PayFirstUpgradeTest is DeployAllTest {
     list[1] = admin2;
   }
 
+  function _unoptimizedBuild() internal view returns (bool) {
+    return keccak256(bytes(vm.envOr("FOUNDRY_PROFILE", string("")))) == keccak256("coverage");
+  }
+
+  /// @dev The script as shipped, except under the coverage profile where its size check cannot hold
+  function _instance() internal returns (PayFirstUpgrade) {
+    return _unoptimizedBuild() ? new PayFirstUpgradeUnoptimized() : new PayFirstUpgrade();
+  }
+
   /// @dev Inputs are pinned through setters: vm.setEnv is process-wide across parallel tests.
   function _newScript(address[] memory fulfillers) internal returns (PayFirstUpgrade script) {
-    script = new PayFirstUpgrade();
+    script = _instance();
     script.setAddressBookJson(_addressBookJson());
     script.setFulfillers(fulfillers);
     script.setDeployment(address(0), address(0), address(0), false);
@@ -69,7 +85,7 @@ contract PayFirstUpgradeTest is DeployAllTest {
 
   /// @dev A script instance for a later invocation, carrying what the deploy run logged
   function _continue(PayFirstUpgrade deployed, bool rollbackImplementation) internal returns (PayFirstUpgrade script) {
-    script = new PayFirstUpgrade();
+    script = _instance();
     script.setAddressBookJson(_addressBookJson());
     script.setFulfillers(_fulfillers());
     script.setDeployment(
@@ -268,7 +284,7 @@ contract PayFirstUpgradeTest is DeployAllTest {
     PayFirstUpgrade deployed = _deployed();
     _continue(deployed, false).pause();
 
-    PayFirstUpgrade script = new PayFirstUpgrade();
+    PayFirstUpgrade script = _instance();
     script.setAddressBookJson(_addressBookJson());
     script.setFulfillers(_fulfillers());
     script.setDeployment(deployed.newImplementation(), address(previousPool), previousImplementation, false);
@@ -281,7 +297,7 @@ contract PayFirstUpgradeTest is DeployAllTest {
     PayFirstUpgrade deployed = _deployed();
     _continue(deployed, false).pause();
 
-    PayFirstUpgrade script = new PayFirstUpgrade();
+    PayFirstUpgrade script = _instance();
     script.setAddressBookJson(_addressBookJson());
     script.setFulfillers(_fulfillers());
     script.setDeployment(address(previousPool), address(deployed.newOrderPool()), previousImplementation, false);
@@ -308,7 +324,8 @@ contract PayFirstUpgradeTest is DeployAllTest {
 
   function test_deployedImplementationFitsTheSizeLimit() public {
     PayFirstUpgrade deployed = _deployed();
-    assertLe(deployed.newImplementation().code.length, 24_576, "EIP-170");
+    assertLe(deployed.newImplementation().code.length, deployed.maxRuntimeSize(), "EIP-170");
+    assertEq(deployed.maxRuntimeSize(), _unoptimizedBuild() ? type(uint256).max : 24_576, "limit");
     assertGt(address(new GeneralManager()).code.length, 0, "deployable");
     assertGt(address(new OrderPool(previousPool.nativeWrapper(), address(gm), admin1)).code.length, 0, "deployable");
   }
