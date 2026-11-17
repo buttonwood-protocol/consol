@@ -258,6 +258,8 @@ contract OrderFulfillmentCallbackTest is BaseTest {
     assertEq(callbackFulfiller.lastUsdxAmount(), purchaseAmount - holdback, "advance");
     assertEq(callbackFulfiller.lastUsdxBalance(), purchaseAmount - holdback, "advance held during the callback");
     assertEq(callbackFulfiller.lastData(), abi.encode(usdxSpend), "fulfiller data");
+    assertTrue(callbackFulfiller.lastGuardEntered(), "guard reported as entered during the callback");
+    assertFalse(generalManager.reentrancyGuardEntered(), "guard released after the fill");
 
     // The market was paid out of the advance and the fulfiller kept the rest
     assertEq(usdx.balanceOf(market), usdxSpend, "market paid");
@@ -272,6 +274,10 @@ contract OrderFulfillmentCallbackTest is BaseTest {
     assertEq(usdx.balanceOf(address(generalManager)), 0, "GeneralManager USDX");
     assertEq(wbtc.balanceOf(address(generalManager)), 0, "GeneralManager collateral");
     assertEq(orderPool.orders(orderId).mortgageParams.collateral, address(0), "order deleted");
+  }
+
+  function test_reentrancyGuardEntered_isFalseOutsideACall() public view {
+    assertFalse(generalManager.reentrancyGuardEntered(), "guard not entered at rest");
   }
 
   function test_callback_fillsWithNoFulfillerCapital_compounding() public {

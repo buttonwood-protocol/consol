@@ -10,6 +10,7 @@ interface IOrderFulfillmentCallback {
   /**
    * @notice Called by the GeneralManager on the fulfiller after advancing it USDX for an order.
    * @dev The implementation must transfer at least `collateralAmount` of `collateral` to `msg.sender` before returning. Must validate that `msg.sender` is the GeneralManager.
+   * @dev Runs while the order's origination pools have lent their USDX and not yet received their Consol, so anything valued from an origination pool's balances is understated for the duration of the call. IGeneralManager#reentrancyGuardEntered is true throughout.
    * @param tokenId The tokenId of the mortgage position being originated
    * @param collateral The address of the collateral token to deliver
    * @param collateralAmount The amount of collateral to deliver to the GeneralManager

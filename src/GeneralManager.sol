@@ -1098,6 +1098,13 @@ contract GeneralManager is
   }
 
   /**
+   * @inheritdoc IGeneralManager
+   */
+  function reentrancyGuardEntered() external view returns (bool) {
+    return _reentrancyGuardEntered();
+  }
+
+  /**
    * @dev Originates a mortgage position by flash borrowing from the origination pools
    * @param originationParameters The parameters for originating a mortgage creation or balance sheet expansion
    * @param fulfillment Empty when the fulfiller delivered the collateral up front. Otherwise abi.encode(uint256 collateralRequested, bytes fulfillerData) for the fulfiller callback.

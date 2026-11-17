@@ -281,6 +281,12 @@ interface IGeneralManager is IOriginationPoolDeployCallback, IPausable, IGeneral
   ) external payable;
 
   /**
+   * @notice Returns whether a non-reentrant GeneralManager function is executing. True for the whole of an origination, including the fulfiller's callback, while the origination pools have lent their USDX and not yet received their Consol. Contracts that price origination pool positions must not do so while this is true.
+   * @return Whether a non-reentrant GeneralManager function is in the call stack
+   */
+  function reentrancyGuardEntered() external view returns (bool);
+
+  /**
    * @notice Enqueues a mortgage position into a conversion queue
    * @param tokenId The tokenId of the mortgage position
    * @param conversionQueueList The list of conversion queues to use
