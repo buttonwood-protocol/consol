@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IOrderFulfillmentCallback} from "../../src/interfaces/IOrderFulfillmentCallback.sol";
 import {IOrderPool} from "../../src/interfaces/IOrderPool/IOrderPool.sol";
+import {IGeneralManager} from "../../src/interfaces/IGeneralManager/IGeneralManager.sol";
 import {MockERC20} from "./MockERC20.sol";
 
 /**
@@ -37,6 +38,7 @@ contract MockCallbackFulfiller is IOrderFulfillmentCallback {
   uint256 public lastCollateralAmount;
   uint256 public lastUsdxAmount;
   uint256 public lastUsdxBalance;
+  bool public lastGuardEntered;
   bytes public lastData;
 
   constructor(IOrderPool orderPool_, IERC20 usdx_, address market_) {
@@ -87,6 +89,11 @@ contract MockCallbackFulfiller is IOrderFulfillmentCallback {
     lastCollateralAmount = collateralAmount;
     lastUsdxAmount = usdxAmount;
     lastUsdxBalance = usdx.balanceOf(address(this));
+    try IGeneralManager(msg.sender).reentrancyGuardEntered() returns (bool entered) {
+      lastGuardEntered = entered;
+    } catch {
+      lastGuardEntered = false;
+    }
     lastData = data;
 
     if (reentryTarget != address(0)) {
